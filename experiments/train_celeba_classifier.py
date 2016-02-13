@@ -144,11 +144,11 @@ def run():
     monitored_quantities = [cost, accuracy]
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities, valid_monitor_stream, prefix="valid",
-        before_first_epoch=False, after_epoch=False, every_n_epochs=5)
+        before_first_epoch=False, after_epoch=False, every_n_epochs=1)
 
     # Prepare checkpoint
     checkpoint = Checkpoint(
-        'celeba_classifier.zip', every_n_epochs=5, use_cpickle=True)
+        'celeba_classifier.zip', every_n_epochs=1, use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=50), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
