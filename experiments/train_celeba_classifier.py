@@ -106,10 +106,11 @@ def create_training_computation_graphs():
     return cg, bn_dropout_cg
 
 
-def run():
-    streams = create_celeba_streams(training_batch_size=100,
-                                    monitoring_batch_size=500,
-                                    include_targets=True)
+def run(batch_size, classifier, allowed):
+    streams = create_celeba_streams(training_batch_size=batch_size,
+                                    monitoring_batch_size=batch_size,
+                                    include_targets=True,
+                                    allowed=allowed)
     main_loop_stream = streams[0]
     train_monitor_stream = streams[1]
     valid_monitor_stream = streams[2]
@@ -147,8 +148,7 @@ def run():
         before_first_epoch=False, after_epoch=False, every_n_epochs=1)
 
     # Prepare checkpoint
-    checkpoint = Checkpoint(
-        'celeba_classifier.zip', every_n_epochs=1, use_cpickle=True)
+    checkpoint = Checkpoint(classifier, every_n_epochs=1, use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=50), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
@@ -161,5 +161,13 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Train a classifier on the CelebA dataset")
+    parser.add_argument('--classifier', dest='classifier', type=str, default="celeba_classifier.zip")
+    parser.add_argument("--allowed", dest='allowed', type=str, default=None,
+                help="Only allow whitelisted labels L1,L2,...")
+    parser.add_argument("--batch-size", type=int, dest="batch_size",
+                default=100, help="Size of each mini-batch")
     args = parser.parse_args()
-    run()
+    allowed = None
+    if(args.allowed):
+        allowed = map(int, args.allowed.split(","))
+    run(args.batch_size, args.classifier, allowed)
