@@ -306,8 +306,12 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
             tensor.log(2 * pi) + 2 * log_sigma +
             (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
         ).sum(axis=[1, 2, 3])
-        total_reconstruction_term = reconstruction_term
 
+        # FIXME: this is maybe the dumbest way to make [0.0] * batch_size ...
+        discriminative_term = 0.0 * (
+            tensor.log(2 * pi) + 2 * log_sigma +
+            (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
+        ).sum(axis=[1, 2, 3])
         if discriminative_regularization:
             # Propagate both the input and the reconstruction through the
             # classifier
@@ -325,14 +329,16 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
                 d_hat, = variable_filter(acts_hat_cg)
                 log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
 
-                total_reconstruction_term += -0.5 * (
+                discriminative_term += -0.5 * (
                     tensor.log(2 * pi) + 2 * log_sigma +
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=[1, 2, 3])
 
+        total_reconstruction_term = reconstruction_term + discriminative_term
+
         cost = (kl_term - total_reconstruction_term).mean()
 
-        return ComputationGraph([cost, kl_term, reconstruction_term])
+        return ComputationGraph([cost, kl_term, reconstruction_term, discriminative_term])
 
     cg = create_computation_graph()
     with batch_normalization(encoder_convnet, encoder_mlp,
@@ -376,14 +382,16 @@ def run(batch_size, save_path, z_dim, discriminative_regularization=True, classi
     # Prepare monitoring
     monitored_quantities_list = []
     for graph in [bn_cg, cg]:
-        cost, kl_term, reconstruction_term = graph.outputs
+        cost, kl_term, reconstruction_term, discriminative_term = graph.outputs
         cost.name = 'nll_upper_bound'
         avg_kl_term = kl_term.mean(axis=0)
         avg_kl_term.name = 'avg_kl_term'
         avg_reconstruction_term = -reconstruction_term.mean(axis=0)
         avg_reconstruction_term.name = 'avg_reconstruction_term'
+        avg_discriminative_term = discriminative_term.mean(axis=0)
+        avg_discriminative_term.name = 'avg_discriminative_term'
         monitored_quantities_list.append(
-            [cost, avg_kl_term, avg_reconstruction_term])
+            [cost, avg_kl_term, avg_reconstruction_term, avg_discriminative_term])
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
         updates=extra_updates, after_epoch=False, before_first_epoch=False,
