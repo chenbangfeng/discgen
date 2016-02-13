@@ -27,8 +27,7 @@ from theano import tensor
 
 from discgen.utils import create_celeba_streams
 
-
-def create_model_bricks():
+def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
         layers=[
             Convolutional(
@@ -127,7 +126,7 @@ def create_model_bricks():
     encoder_filters = numpy.prod(encoder_convnet.get_dim('output'))
 
     encoder_mlp = MLP(
-        dims=[encoder_filters, 1000, 1000],
+        dims=[encoder_filters, 1000, z_dim],
         activations=[Sequence([BatchNormalization(1000).apply,
                                Rectifier().apply], name='activation1'),
                      Identity().apply],
@@ -251,14 +250,14 @@ def create_model_bricks():
     return encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp
 
 
-def create_training_computation_graphs(discriminative_regularization):
+def create_training_computation_graphs(z_dim, discriminative_regularization, classifer):
     x = tensor.tensor4('features')
     pi = numpy.cast[theano.config.floatX](numpy.pi)
 
-    bricks = create_model_bricks()
+    bricks = create_model_bricks(z_dim)
     encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp = bricks
     if discriminative_regularization:
-        classifier_model = Model(load('celeba_classifier.zip').algorithm.cost)
+        classifier_model = Model(load(classifer).algorithm.cost)
         selector = Selector(classifier_model.top_bricks)
         classifier_convnet, = selector.select('/convnet').bricks
     random_brick = Random()
@@ -343,15 +342,15 @@ def create_training_computation_graphs(discriminative_regularization):
     return cg, bn_cg, variance_parameters
 
 
-def run(discriminative_regularization=True):
-    streams = create_celeba_streams(training_batch_size=100,
-                                    monitoring_batch_size=500,
+def run(batch_size, save_path, z_dim, discriminative_regularization=True, classifier=None):
+    streams = create_celeba_streams(training_batch_size=batch_size,
+                                    monitoring_batch_size=batch_size,
                                     include_targets=False)
     main_loop_stream, train_monitor_stream, valid_monitor_stream = streams[:3]
 
     # Compute parameter updates for the batch normalization population
     # statistics. They are updated following an exponential moving average.
-    rval = create_training_computation_graphs(discriminative_regularization)
+    rval = create_training_computation_graphs(z_dim, discriminative_regularization, classifier)
     cg, bn_cg, variance_parameters = rval
     pop_updates = list(
         set(get_batch_normalization_updates(bn_cg, allow_duplicates=True)))
@@ -388,15 +387,13 @@ def run(discriminative_regularization=True):
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
         updates=extra_updates, after_epoch=False, before_first_epoch=False,
-        every_n_epochs=5)
+        every_n_epochs=1)
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities_list[1], valid_monitor_stream, prefix="valid",
-        after_epoch=False, before_first_epoch=False, every_n_epochs=5)
+        after_epoch=False, before_first_epoch=False, every_n_epochs=1)
 
     # Prepare checkpoint
-    save_path = 'celeba_vae_{}regularization.zip'.format(
-        '' if discriminative_regularization else 'no_')
-    checkpoint = Checkpoint(save_path, every_n_epochs=5, use_cpickle=True)
+    checkpoint = Checkpoint(save_path, every_n_epochs=1, use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=75), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
@@ -411,5 +408,11 @@ if __name__ == "__main__":
         description="Train a VAE on the CelebA dataset")
     parser.add_argument("--regularize", action='store_true',
                         help="apply discriminative regularization")
+    parser.add_argument('--classifier', dest='classifier', type=str, default="celeba_classifier.zip")
+    parser.add_argument('--model', dest='model', type=str, default="celeba_vae_regularization.zip")
+    parser.add_argument("--batch-size", type=int, dest="batch_size",
+                default=100, help="Size of each mini-batch")
+    parser.add_argument("--z-dim", type=int, dest="z_dim",
+                default=1000, help="Z-vector dimension")
     args = parser.parse_args()
-    run(args.regularize)
+    run(args.batch_size, args.model, args.z_dim, args.regularize, args.classifier)
