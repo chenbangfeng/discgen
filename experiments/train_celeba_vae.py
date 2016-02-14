@@ -250,7 +250,8 @@ def create_model_bricks(z_dim):
     return encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp
 
 
-def create_training_computation_graphs(z_dim, discriminative_regularization, classifer):
+def create_training_computation_graphs(z_dim, discriminative_regularization, classifer,
+        reconstruction_factor, kl_factor, discriminative_factor):
     x = tensor.tensor4('features')
     pi = numpy.cast[theano.config.floatX](numpy.pi)
 
@@ -325,6 +326,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
                                         variance_parameters[1:]):
                 variable_filter = VariableFilter(roles=[OUTPUT],
                                                  bricks=[layer])
+
                 d, = variable_filter(acts_cg)
                 d_hat, = variable_filter(acts_hat_cg)
                 log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
@@ -334,9 +336,8 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=[1, 2, 3])
 
-        total_reconstruction_term = reconstruction_term + discriminative_term
-
-        cost = (kl_term - total_reconstruction_term).mean()
+        total_reconstruction_term = reconstruction_factor * reconstruction_term + discriminative_factor * discriminative_term
+        cost = (kl_factor * kl_term - total_reconstruction_term).mean()
 
         return ComputationGraph([cost, kl_term, reconstruction_term, discriminative_term])
 
@@ -348,7 +349,8 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
     return cg, bn_cg, variance_parameters
 
 
-def run(batch_size, save_path, z_dim, discriminative_regularization=True, classifier=None):
+def run(batch_size, save_path, z_dim, discriminative_regularization=True, classifier=None,
+        reconstruction_factor=1.0, kl_factor=1.0, discriminative_factor=1.0):
     streams = create_celeba_streams(training_batch_size=batch_size,
                                     monitoring_batch_size=batch_size,
                                     include_targets=False)
@@ -356,7 +358,8 @@ def run(batch_size, save_path, z_dim, discriminative_regularization=True, classi
 
     # Compute parameter updates for the batch normalization population
     # statistics. They are updated following an exponential moving average.
-    rval = create_training_computation_graphs(z_dim, discriminative_regularization, classifier)
+    rval = create_training_computation_graphs(z_dim, discriminative_regularization, classifier,
+                reconstruction_factor, kl_factor, discriminative_factor)
     cg, bn_cg, variance_parameters = rval
     pop_updates = list(
         set(get_batch_normalization_updates(bn_cg, allow_duplicates=True)))
@@ -422,5 +425,12 @@ if __name__ == "__main__":
                 default=100, help="Size of each mini-batch")
     parser.add_argument("--z-dim", type=int, dest="z_dim",
                 default=1000, help="Z-vector dimension")
+    parser.add_argument("--reconstruction-factor", type=float, dest="reconstruction_factor",
+                default=1.0, help="Scaling Factor for reconstruction term")
+    parser.add_argument("--kl-factor", type=float, dest="kl_factor",
+                default=1.0, help="Scaling Factor for KL term")
+    parser.add_argument("--discriminative-factor", type=float, dest="discriminative_factor",
+                default=1.0, help="Scaling Factor for discriminative term")
     args = parser.parse_args()
-    run(args.batch_size, args.model, args.z_dim, args.regularize, args.classifier)
+    run(args.batch_size, args.model, args.z_dim, args.regularize, args.classifier,
+        args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
