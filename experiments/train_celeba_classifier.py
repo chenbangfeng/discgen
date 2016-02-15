@@ -19,8 +19,7 @@ from blocks.main_loop import MainLoop
 from blocks.roles import OUTPUT
 from theano import tensor
 
-from discgen.utils import create_celeba_streams
-
+from discgen.utils import create_celeba_streams, create_custom_streams
 
 def create_model_bricks():
     convnet = ConvolutionalSequence(
@@ -106,11 +105,20 @@ def create_training_computation_graphs():
     return cg, bn_dropout_cg
 
 
-def run(batch_size, classifier, monitor_every, checkpoint_every, allowed):
-    streams = create_celeba_streams(training_batch_size=batch_size,
-                                    monitoring_batch_size=batch_size,
-                                    include_targets=True,
-                                    allowed=allowed)
+def run(batch_size, classifier, monitor_every, checkpoint_every, dataset, color_convert, allowed):
+
+    if dataset:
+        streams = create_custom_streams(filename=dataset,
+                                        training_batch_size=batch_size,
+                                        monitoring_batch_size=batch_size,
+                                        include_targets=True,
+                                        color_convert=color_convert)
+    else:
+        streams = create_celeba_streams(training_batch_size=batch_size,
+                                        monitoring_batch_size=batch_size,
+                                        include_targets=True,
+                                        allowed=allowed)
+
     main_loop_stream = streams[0]
     train_monitor_stream = streams[1]
     valid_monitor_stream = streams[2]
@@ -170,8 +178,14 @@ if __name__ == "__main__":
                 default=5, help="Frequency in epochs for monitoring")
     parser.add_argument("--checkpoint-every", type=int, dest="checkpoint_every",
                 default=5, help="Frequency in epochs for checkpointing")
+    parser.add_argument('--dataset', dest='dataset', default=None,
+                help="Use a different dataset for training.")
+    parser.add_argument('--color-convert', dest='color_convert', default=False, \
+                action='store_true', help="Convert source dataset to color from grayscale.")
+
     args = parser.parse_args()
     allowed = None
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
-    run(args.batch_size, args.classifier, args.monitor_every, args.checkpoint_every, allowed)
+    run(args.batch_size, args.classifier, args.monitor_every, args.checkpoint_every,
+        args.dataset, args.color_convert, allowed)
