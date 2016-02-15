@@ -7,6 +7,7 @@ from blocks.initialization import Constant
 from fuel.datasets import SVHN, CIFAR10, CelebA
 from fuel.schemes import ShuffledScheme
 from fuel.streams import DataStream
+from fuel.transformers import AgnosticSourcewiseTransformer
 from matplotlib import cm, pyplot
 from mpl_toolkits.axes_grid1 import ImageGrid
 from six.moves import zip, cPickle
@@ -143,9 +144,22 @@ def create_cifar10_streams(training_batch_size, monitoring_batch_size):
     return create_streams(train_set, valid_set, test_set, training_batch_size,
                           monitoring_batch_size)
 
+class Scrubber(AgnosticSourcewiseTransformer):
+    def __init__(self, data_stream, allowed, **kwargs):
+        super(Scrubber, self).__init__(
+             data_stream=data_stream,
+             produces_examples=data_stream.produces_examples,
+             **kwargs)
+        self.allowed = [0] * 40
+        for a in allowed:
+            self.allowed[a] = 1
+
+    def transform_any_source(self, source, _):
+        return [a*b for a,b in zip(self.allowed,source)]
 
 def create_celeba_streams(training_batch_size, monitoring_batch_size,
-                          include_targets=False):
+                          include_targets=False,
+                          allowed=None):
     """Creates CelebA data streams.
 
     Parameters
@@ -171,8 +185,14 @@ def create_celeba_streams(training_batch_size, monitoring_batch_size,
     valid_set = CelebA('64', ('valid',), sources=sources)
     test_set = CelebA('64', ('test',), sources=sources)
 
-    return create_streams(train_set, valid_set, test_set, training_batch_size,
-                          monitoring_batch_size)
+    results = create_streams(train_set, valid_set, test_set, training_batch_size,
+                             monitoring_batch_size)
+
+    # wrap streams in scrubber if not all labels are allowed
+    if allowed:
+        results = tuple(map(lambda s: Scrubber(s, allowed=allowed, which_sources=('targets',)), results))
+
+    return results
 
 
 def load_vgg_classifier():
