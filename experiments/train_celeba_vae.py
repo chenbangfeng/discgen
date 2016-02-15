@@ -349,9 +349,9 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
     return cg, bn_cg, variance_parameters
 
 
-def run(batch_size, save_path, z_dim, discriminative_regularization=True, classifier=None,
-        dataset=None, color_convert=False,
-        reconstruction_factor=1.0, kl_factor=1.0, discriminative_factor=1.0):
+def run(batch_size, save_path, z_dim, discriminative_regularization, classifier,
+        monitor_every, checkpoint_every, dataset, color_convert,
+        reconstruction_factor, kl_factor, discriminative_factor):
 
     if dataset:
         streams = create_custom_streams(filename=dataset,
@@ -408,13 +408,13 @@ def run(batch_size, save_path, z_dim, discriminative_regularization=True, classi
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
         updates=extra_updates, after_epoch=False, before_first_epoch=False,
-        every_n_epochs=1)
+        every_n_epochs=monitor_every)
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities_list[1], valid_monitor_stream, prefix="valid",
-        after_epoch=False, before_first_epoch=False, every_n_epochs=1)
+        after_epoch=False, before_first_epoch=False, every_n_epochs=monitor_every)
 
     # Prepare checkpoint
-    checkpoint = Checkpoint(save_path, every_n_epochs=1, use_cpickle=True)
+    checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every, use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=75), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
@@ -441,11 +441,15 @@ if __name__ == "__main__":
                 default=1.0, help="Scaling Factor for KL term")
     parser.add_argument("--discriminative-factor", type=float, dest="discriminative_factor",
                 default=1.0, help="Scaling Factor for discriminative term")
+    parser.add_argument("--monitor-every", type=int, dest="monitor_every",
+                default=5, help="Frequency in epochs for monitoring")
+    parser.add_argument("--checkpoint-every", type=int, dest="checkpoint_every",
+                default=5, help="Frequency in epochs for checkpointing")
     parser.add_argument('--dataset', dest='dataset', default=None,
                 help="Use a different dataset for training.")
     parser.add_argument('--color-convert', dest='color_convert', default=False, \
                 action='store_true', help="Convert source dataset to color from grayscale.")
     args = parser.parse_args()
     run(args.batch_size, args.model, args.z_dim, args.regularize, args.classifier,
-        args.dataset, args.color_convert,
+        args.monitor_every, args.checkpoint_every, args.dataset, args.color_convert,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
