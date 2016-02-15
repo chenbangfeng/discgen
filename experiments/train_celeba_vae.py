@@ -25,7 +25,7 @@ from blocks.serialization import load
 from blocks.utils import find_bricks, shared_floatx
 from theano import tensor
 
-from discgen.utils import create_celeba_streams
+from discgen.utils import create_celeba_streams, create_custom_streams
 
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
@@ -350,10 +350,20 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
 
 
 def run(batch_size, save_path, z_dim, discriminative_regularization=True, classifier=None,
+        dataset=None, color_convert=False,
         reconstruction_factor=1.0, kl_factor=1.0, discriminative_factor=1.0):
-    streams = create_celeba_streams(training_batch_size=batch_size,
-                                    monitoring_batch_size=batch_size,
-                                    include_targets=False)
+
+    if dataset:
+        streams = create_custom_streams(filename=dataset,
+                                        training_batch_size=batch_size,
+                                        monitoring_batch_size=batch_size,
+                                        include_targets=False,
+                                        color_convert=color_convert)
+    else:
+        streams = create_celeba_streams(training_batch_size=batch_size,
+                                        monitoring_batch_size=batch_size,
+                                        include_targets=False)
+
     main_loop_stream, train_monitor_stream, valid_monitor_stream = streams[:3]
 
     # Compute parameter updates for the batch normalization population
@@ -431,6 +441,11 @@ if __name__ == "__main__":
                 default=1.0, help="Scaling Factor for KL term")
     parser.add_argument("--discriminative-factor", type=float, dest="discriminative_factor",
                 default=1.0, help="Scaling Factor for discriminative term")
+    parser.add_argument('--dataset', dest='dataset', default=None,
+                help="Use a different dataset for training.")
+    parser.add_argument('--color-convert', dest='color_convert', default=False, \
+                action='store_true', help="Convert source dataset to color from grayscale.")
     args = parser.parse_args()
     run(args.batch_size, args.model, args.z_dim, args.regularize, args.classifier,
+        args.dataset, args.color_convert,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
