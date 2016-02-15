@@ -106,7 +106,7 @@ def create_training_computation_graphs():
     return cg, bn_dropout_cg
 
 
-def run(batch_size, classifier, allowed):
+def run(batch_size, classifier, monitor_every, checkpoint_every, allowed):
     streams = create_celeba_streams(training_batch_size=batch_size,
                                     monitoring_batch_size=batch_size,
                                     include_targets=True,
@@ -145,10 +145,10 @@ def run(batch_size, classifier, allowed):
     monitored_quantities = [cost, accuracy]
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities, valid_monitor_stream, prefix="valid",
-        before_first_epoch=False, after_epoch=False, every_n_epochs=1)
+        before_first_epoch=False, after_epoch=False, every_n_epochs=monitor_every)
 
     # Prepare checkpoint
-    checkpoint = Checkpoint(classifier, every_n_epochs=1, use_cpickle=True)
+    checkpoint = Checkpoint(classifier, every_n_epochs=checkpoint_every, use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=50), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
@@ -166,8 +166,12 @@ if __name__ == "__main__":
                 help="Only allow whitelisted labels L1,L2,...")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
                 default=100, help="Size of each mini-batch")
+    parser.add_argument("--monitor-every", type=int, dest="monitor_every",
+                default=5, help="Frequency in epochs for monitoring")
+    parser.add_argument("--checkpoint-every", type=int, dest="checkpoint_every",
+                default=5, help="Frequency in epochs for checkpointing")
     args = parser.parse_args()
     allowed = None
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
-    run(args.batch_size, args.classifier, allowed)
+    run(args.batch_size, args.classifier, args.monitor_every, args.checkpoint_every, allowed)
