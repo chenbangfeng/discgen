@@ -349,7 +349,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
     return cg, bn_cg, variance_parameters
 
 
-def run(batch_size, save_path, z_dim, discriminative_regularization, classifier,
+def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization, classifier,
         monitor_every, checkpoint_every, dataset, color_convert,
         reconstruction_factor, kl_factor, discriminative_factor):
 
@@ -371,6 +371,7 @@ def run(batch_size, save_path, z_dim, discriminative_regularization, classifier,
     rval = create_training_computation_graphs(z_dim, discriminative_regularization, classifier,
                 reconstruction_factor, kl_factor, discriminative_factor)
     cg, bn_cg, variance_parameters = rval
+
     pop_updates = list(
         set(get_batch_normalization_updates(bn_cg, allow_duplicates=True)))
     decay_rate = 0.05
@@ -378,6 +379,7 @@ def run(batch_size, save_path, z_dim, discriminative_regularization, classifier,
                      for p, m in pop_updates]
 
     model = Model(bn_cg.outputs[0])
+
     selector = Selector(
         find_bricks(
             model.top_bricks,
@@ -407,7 +409,7 @@ def run(batch_size, save_path, z_dim, discriminative_regularization, classifier,
             [cost, avg_kl_term, avg_reconstruction_term, avg_discriminative_term])
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
-        updates=extra_updates, after_epoch=False, before_first_epoch=False,
+        updates=extra_updates, after_epoch=False, before_first_epoch=True,
         every_n_epochs=monitor_every)
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities_list[1], valid_monitor_stream, prefix="valid",
@@ -418,15 +420,22 @@ def run(batch_size, save_path, z_dim, discriminative_regularization, classifier,
 
     extensions = [Timing(), FinishAfter(after_n_epochs=75), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
-    main_loop = MainLoop(data_stream=main_loop_stream,
+    main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
+
+    if oldmodel is not None:
+        print("Initializing parameters with old model {}".format(oldmodel))
+        saved_model = load(oldmodel)
+        main_loop.model.set_parameter_values(saved_model.model.get_parameter_values())
+        del saved_model
+
     main_loop.run()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(
-        description="Train a VAE on the CelebA dataset")
+        description="Train a VAE on a fuel dataset")
     parser.add_argument("--regularize", action='store_true',
                         help="apply discriminative regularization")
     parser.add_argument('--classifier', dest='classifier', type=str, default="celeba_classifier.zip")
@@ -449,7 +458,9 @@ if __name__ == "__main__":
                 help="Use a different dataset for training.")
     parser.add_argument('--color-convert', dest='color_convert', default=False, \
                 action='store_true', help="Convert source dataset to color from grayscale.")
+    parser.add_argument("--oldmodel", type=str, default=None,
+                help="Use a model file created by a previous run as a starting point for parameters")
     args = parser.parse_args()
-    run(args.batch_size, args.model, args.z_dim, args.regularize, args.classifier,
+    run(args.batch_size, args.model, args.z_dim, args.oldmodel, args.regularize, args.classifier,
         args.monitor_every, args.checkpoint_every, args.dataset, args.color_convert,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
