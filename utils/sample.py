@@ -17,7 +17,7 @@ import random
 
 from discgen.utils import plot_image_grid
 
-def main(saved_model_path, rows, cols, flat, gradient, splash, analogy, tight, save_path):
+def main(saved_model_path, rows, cols, flat, gradient, circular, gaussian, splash, analogy, tight, save_path):
     print('Loading saved model...')
     model = Model(load(saved_model_path).algorithm.cost)
     selector = Selector(model.top_bricks)
@@ -26,13 +26,15 @@ def main(saved_model_path, rows, cols, flat, gradient, splash, analogy, tight, s
 
     print('Building computation graph...')
 
+    spacing = 3
+
     z_dim = decoder_mlp.input_dim
     if flat:
         z = shared_floatx(make_flat(z_dim, cols, rows))
     elif gradient:
-        z = shared_floatx(compute_gradient(rows, cols, z_dim, analogy, None))
+        z = shared_floatx(compute_gradient(rows, cols, z_dim, analogy, None, circular, gaussian))
     elif splash:
-        z = shared_floatx(compute_splash(rows, cols, z_dim, 3))
+        z = shared_floatx(compute_splash(rows, cols, z_dim, spacing, circular, gaussian))
     else:
         z = Random().theano_rng.normal(size=(rows * cols, z_dim),
                                        dtype=theano.config.floatX)
@@ -68,6 +70,8 @@ if __name__ == "__main__":
     parser.add_argument('--flat', dest='flat', default=False, action='store_true')
     parser.add_argument('--analogy', dest='analogy', default=False, action='store_true')
     parser.add_argument('--gradient', dest='gradient', default=False, action='store_true')
+    parser.add_argument('--circular', dest='circular', default=False, action='store_true')
+    parser.add_argument('--gaussian', dest='gaussian', default=False, action='store_true')
     parser.add_argument('--tight', dest='tight', default=False, action='store_true')
     parser.add_argument("--seed", type=int,
                 default=None, help="Optional random seed")
@@ -78,4 +82,4 @@ if __name__ == "__main__":
         np.random.seed(args.seed)
         random.seed(args.seed)
 
-    main(args.saved_model_path, args.rows, args.cols, args.flat, args.gradient, args.splash, args.analogy, args.tight, args.save_path)
+    main(args.saved_model_path, args.rows, args.cols, args.flat, args.gradient, args.circular, args.gaussian, args.splash, args.analogy, args.tight, args.save_path)
