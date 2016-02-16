@@ -16,6 +16,7 @@ from blocks.model import Model
 from blocks.config import config
 
 from scipy.special import ndtri, ndtr
+from scipy.stats import norm
 
 ### Load a model from disk
 def load_file(filename):
@@ -180,10 +181,39 @@ def sample_random(model, numsamples):
     print("Shape: {}".format(samples.shape))
     return samples
 
-def lerp(val, low, high):
-    return low + (high - low) * val
+def compute_splash(rows, cols, dim, space, circular, gaussian):
+    lerpv = get_lerpv_by_type(circular, gaussian)
 
-def compute_splash(rows, cols, dim, space):
+    u_list = np.zeros((rows, cols, dim))
+    # compute anchors
+    for y in range(rows):
+        for x in range(cols):
+            if y%space == 0 and x%space == 0:
+                u_list[y,x,:] = np.random.normal(0,1, (1, dim))
+    # interpolate horizontally
+    for y in range(rows):
+        for x in range(cols):
+            if y%space == 0 and x%space != 0:
+                lastX = space * (x // space)
+                nextX = lastX + space
+                fracX = (x - lastX) / float(space)
+#                 print("{} - {} - {}".format(lastX, nextX, fracX))
+                u_list[y,x,:] = lerpv(fracX, u_list[y, lastX, :], u_list[y, nextX, :])
+    # interpolate vertically
+    for y in range(rows):
+        for x in range(cols):
+            if y%space != 0:
+                lastY = space * (y // space)
+                nextY = lastY + space
+                fracY = (y - lastY) / float(space)
+                u_list[y,x,:] = lerpv(fracY, u_list[lastY, x, :], u_list[nextY, x, :])
+
+    u_grid = u_list.reshape(rows * cols, dim)
+
+    return u_grid
+
+
+def compute_splash_old2(rows, cols, dim, space):
     u_list = np.zeros((cols, rows, dim))
 
     # compute anchors
@@ -236,7 +266,53 @@ def compute_splash_old(rows, cols, dim):
 
     return u_gau
 
-def compute_gradient_warped(rows, cols, dim, analogy, anchors):
+def lerp(val, low, high):
+    return low + (high - low) * val
+
+# this is a placeholder for a future version of spherical interpolation. 
+# I think the right thing to do would be to convert to n-sphere spherical
+# coordinates and interpolate there.
+# https://en.wikipedia.org/wiki/N-sphere#Spherical_coordinates
+def lerp_circle(val, low, high):
+    # first compute the interpolated length
+    rad_low = np.linalg.norm(low)
+    rad_high = np.linalg.norm(high)
+    rad_cur = lerp(val, rad_low, rad_high)
+
+    # then compute the linearly interpolated vector but at unit length
+    lerp_vec = lerp(val, low, high)
+    rad_lerp_vec = np.linalg.norm(lerp_vec)
+    unit_vec = np.nan_to_num(lerp_vec / rad_lerp_vec)
+
+    # now just return the product of the length and direction
+    return rad_cur * unit_vec
+
+def lerp_gaussian(val, low, high):
+    low_gau = norm.cdf(low)
+    high_gau = norm.cdf(high)
+    lerped_gau = lerp(val, low_gau, high_gau)
+    return norm.ppf(lerped_gau)
+
+def lerp_circle_gaussian(val, low, high):
+    offset = norm.cdf(np.zeros_like(low))  # offset is just [0.5, 0.5, ...]
+    low_gau_shifted = norm.cdf(low) - offset
+    high_gau_shifted = norm.cdf(high) - offset
+    circle_lerped_gau = lerp_circle(val, low_gau_shifted, high_gau_shifted)
+    return norm.ppf(circle_lerped_gau + offset)
+
+def get_lerpv_by_type(circular, gaussian):
+    if circular and gaussian:
+        return lerp_circle_gaussian
+    elif circular:
+        return lerp_circle
+    elif gaussian:
+        return lerp_gaussian
+    else:
+        return lerp
+
+def compute_gradient(rows, cols, dim, analogy, anchors, circular, gaussian):
+    lerpv = get_lerpv_by_type(circular, gaussian)
+
     numsamples = rows * cols
     u_list = np.zeros((numsamples, dim))
     if anchors:
@@ -253,16 +329,18 @@ def compute_gradient_warped(rows, cols, dim, analogy, anchors):
         xmax_ymax = np.random.normal(0, 1, (1, dim))
 
     for y in range(rows):
-        xmin_ycur = (((rows - y - 1.0) * xmin_ymin) + (1.0 * y * xmin_ymax)) / (rows - 1.0)
-        xmax_ycur = (((rows - y - 1.0) * xmax_ymin) + (1.0 * y * xmax_ymax)) / (rows - 1.0)
+        y_frac = y / (rows - 1)
+        xmin_ycur = lerpv(y_frac, xmin_ymin, xmin_ymax)
+        xmax_ycur = lerpv(y_frac, xmax_ymin, xmax_ymax)
         for x in range(cols):
-            xcur_ycur = (((cols - x - 1.0) * xmin_ycur) + (1.0 * x * xmax_ycur)) / (cols - 1.0)
+            x_frac = x / (cols - 1)
+            xcur_ycur = lerpv(x_frac, xmin_ycur, xmax_ycur)
             n = y * cols + x
             u_list[n:n+1,:] = xcur_ycur
 
     return u_list
 
-def compute_gradient(rows, cols, dim, analogy, anchors):
+def compute_gradient_oldy(rows, cols, dim, analogy, anchors):
     numsamples = rows * cols
     u_list = np.zeros((numsamples, dim))
     if anchors:
