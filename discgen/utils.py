@@ -18,6 +18,7 @@ import numpy as np
 import os
 import sys
 
+
 def plot_image_grid(images, num_rows, num_cols, save_path=None):
     """Plots images in a grid.
 
@@ -136,7 +137,7 @@ class Colorize(AgnosticSourcewiseTransformer):
 
 
 def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
-                          include_targets=False, color_convert=False):
+                          include_targets=False, color_convert=False, allowed=None):
     """Creates data streams from fuel hdf5 file. Currently features must be 64x64.
 
     Parameters
@@ -189,6 +190,10 @@ def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
     if color_convert:
         results = tuple(map(lambda s: Colorize(s, which_sources=('features',)), results))
 
+    # wrap streams in scrubber if not all labels are allowed
+    if allowed:
+        results = tuple(map(lambda s: Scrubber(s, allowed=allowed, which_sources=('targets',)), results))
+
     return results
 
 
@@ -232,8 +237,7 @@ class Scrubber(AgnosticSourcewiseTransformer):
         return [a*b for a,b in zip(self.allowed,source)]
 
 def create_celeba_streams(training_batch_size, monitoring_batch_size,
-                          include_targets=False,
-                          allowed=None):
+                          include_targets=False):
     """Creates CelebA data streams.
 
     Parameters
@@ -259,14 +263,8 @@ def create_celeba_streams(training_batch_size, monitoring_batch_size,
     valid_set = CelebA('64', ('valid',), sources=sources)
     test_set = CelebA('64', ('test',), sources=sources)
 
-    results = create_streams(train_set, valid_set, test_set, training_batch_size,
-                             monitoring_batch_size)
-
-    # wrap streams in scrubber if not all labels are allowed
-    if allowed:
-        results = tuple(map(lambda s: Scrubber(s, allowed=allowed, which_sources=('targets',)), results))
-
-    return results
+    return create_streams(train_set, valid_set, test_set, training_batch_size,
+                          monitoring_batch_size)
 
 
 def load_vgg_classifier():
