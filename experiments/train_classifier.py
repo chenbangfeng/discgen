@@ -16,6 +16,8 @@ from blocks.graph import (ComputationGraph, apply_batch_normalization,
                           get_batch_normalization_updates, apply_dropout)
 from blocks.initialization import IsotropicGaussian, Constant
 from blocks.main_loop import MainLoop
+from blocks.model import Model
+from blocks.serialization import load
 from blocks.roles import OUTPUT
 from theano import tensor
 
@@ -74,7 +76,7 @@ def create_model_bricks():
 
     mlp = BatchNormalizedMLP(
         activations=[Rectifier(), Logistic()],
-        dims=[numpy.prod(convnet.get_dim('output')), 1000, 40],
+        dims=[numpy.prod(convnet.get_dim('output')), 1000, 64],
         weights_init=IsotropicGaussian(0.033),
         biases_init=Constant(0),
         name='mlp')
@@ -105,7 +107,7 @@ def create_training_computation_graphs():
     return cg, bn_dropout_cg
 
 
-def run(batch_size, classifier, monitor_every, checkpoint_every, dataset, color_convert, allowed):
+def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every, dataset, color_convert, allowed):
 
     if dataset:
         streams = create_custom_streams(filename=dataset,
@@ -124,6 +126,8 @@ def run(batch_size, classifier, monitor_every, checkpoint_every, dataset, color_
     valid_monitor_stream = streams[2]
 
     cg, bn_dropout_cg = create_training_computation_graphs()
+
+    model = Model(bn_dropout_cg.outputs[0])
 
     # Compute parameter updates for the batch normalization population
     # statistics. They are updated following an exponential moving average.
@@ -153,15 +157,22 @@ def run(batch_size, classifier, monitor_every, checkpoint_every, dataset, color_
     monitored_quantities = [cost, accuracy]
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities, valid_monitor_stream, prefix="valid",
-        before_first_epoch=False, after_epoch=False, every_n_epochs=monitor_every)
+        before_first_epoch=True, after_epoch=False, every_n_epochs=monitor_every)
 
     # Prepare checkpoint
     checkpoint = Checkpoint(classifier, every_n_epochs=checkpoint_every, use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=50), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
-    main_loop = MainLoop(data_stream=main_loop_stream, algorithm=algorithm,
+    main_loop = MainLoop(model=model, data_stream=main_loop_stream, algorithm=algorithm,
                          extensions=extensions)
+
+    if oldmodel is not None:
+        print("Initializing parameters with old model {}".format(oldmodel))
+        saved_model = load(oldmodel)
+        main_loop.model.set_parameter_values(saved_model.model.get_parameter_values())
+        del saved_model
+
     main_loop.run()
 
 
@@ -182,10 +193,12 @@ if __name__ == "__main__":
                 help="Use a different dataset for training.")
     parser.add_argument('--color-convert', dest='color_convert', default=False, \
                 action='store_true', help="Convert source dataset to color from grayscale.")
+    parser.add_argument("--oldmodel", type=str, default=None,
+                help="Use a model file created by a previous run as a starting point for parameters")
 
     args = parser.parse_args()
     allowed = None
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
-    run(args.batch_size, args.classifier, args.monitor_every, args.checkpoint_every,
+    run(args.batch_size, args.classifier, args.oldmodel, args.monitor_every, args.checkpoint_every,
         args.dataset, args.color_convert, allowed)
