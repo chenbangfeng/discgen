@@ -4,7 +4,6 @@ from blocks.bricks import Rectifier
 from blocks.bricks.conv import (ConvolutionalSequence, Convolutional,
                                 AveragePooling)
 from blocks.initialization import Constant
-import fuel
 from fuel.datasets import SVHN, CIFAR10, CelebA
 from fuel.schemes import ShuffledScheme
 from fuel.streams import DataStream
@@ -12,12 +11,11 @@ from fuel.transformers import AgnosticSourcewiseTransformer
 from fuel.datasets import H5PYDataset
 from fuel.transformers.defaults import uint8_pixels_to_floatX
 from fuel.utils import find_in_data_path
-from matplotlib import cm, pyplot
+from matplotlib import pyplot
 from mpl_toolkits.axes_grid1 import ImageGrid
 from six.moves import zip, cPickle
 import numpy as np
-import os
-import sys
+from theano import tensor
 
 
 def plot_image_grid(images, num_rows, num_cols, save_path=None):
@@ -145,8 +143,11 @@ class Colorize(AgnosticSourcewiseTransformer):
 
 
 def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
-                          include_targets=False, color_convert=False, allowed=None):
-    """Creates data streams from fuel hdf5 file. Currently features must be 64x64.
+                          include_targets=False, color_convert=False,
+                          allowed=None):
+    """Creates data streams from fuel hdf5 file.
+
+    Currently features must be 64x64.
 
     Parameters
     ----------
@@ -170,26 +171,33 @@ def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
         the validation set monitor and the test set monitor.
 
     """
-    img_size = (64, 64)
     sources = ('features', 'targets') if include_targets else ('features',)
 
     dataset_fname = find_in_data_path(filename+'.hdf5')
-    data_train = H5PYDataset(dataset_fname, which_sets=['train'], sources=sources)
-    data_valid = H5PYDataset(dataset_fname, which_sets=['valid'], sources=sources)
-    data_test = H5PYDataset(dataset_fname, which_sets=['test'], sources=sources)
+    data_train = H5PYDataset(dataset_fname, which_sets=['train'],
+                             sources=sources)
+    data_valid = H5PYDataset(dataset_fname, which_sets=['valid'],
+                             sources=sources)
+    data_test = H5PYDataset(dataset_fname, which_sets=['test'],
+                            sources=sources)
     data_train.default_transformers = uint8_pixels_to_floatX(('features',))
     data_valid.default_transformers = uint8_pixels_to_floatX(('features',))
     data_test.default_transformers = uint8_pixels_to_floatX(('features',))
 
-    results = create_streams(data_train, data_valid, data_test, training_batch_size,
-                          monitoring_batch_size)
+    results = create_streams(data_train, data_valid, data_test,
+                             training_batch_size, monitoring_batch_size)
 
     if color_convert:
-        results = tuple(map(lambda s: Colorize(s, which_sources=('features',)), results))
+        results = tuple(map(
+                    lambda s: Colorize(s, which_sources=('features',)),
+                    results))
 
     # wrap streams in scrubber if not all labels are allowed
     if allowed:
-        results = tuple(map(lambda s: Scrubber(s, allowed=allowed, which_sources=('targets',)), results))
+        results = tuple(map(
+                    lambda s: Scrubber(s, allowed=allowed,
+                                       which_sources=('targets',)),
+                    results))
 
     return results
 
@@ -212,13 +220,14 @@ def create_cifar10_streams(training_batch_size, monitoring_batch_size):
 
     """
     train_set = CIFAR10(('train',), sources=('features',),
-                     subset=slice(0, 45000))
+                        subset=slice(0, 45000))
     valid_set = CIFAR10(('train',), sources=('features',),
-                     subset=slice(45000, 50000))
+                        subset=slice(45000, 50000))
     test_set = CIFAR10(('test',), sources=('features',))
 
     return create_streams(train_set, valid_set, test_set, training_batch_size,
                           monitoring_batch_size)
+
 
 class Scrubber(AgnosticSourcewiseTransformer):
     """Used to whitelist selected labels for training.
@@ -245,7 +254,8 @@ class Scrubber(AgnosticSourcewiseTransformer):
             self.allowed[a] = 1
 
     def transform_any_source(self, source, _):
-        return [a*b for a,b in zip(self.allowed,source)]
+        return [a*b for a, b in zip(self.allowed, source)]
+
 
 def create_celeba_streams(training_batch_size, monitoring_batch_size,
                           include_targets=False):

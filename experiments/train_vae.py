@@ -27,6 +27,7 @@ from theano import tensor
 
 from discgen.utils import create_celeba_streams, create_custom_streams
 
+
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
         layers=[
@@ -250,8 +251,9 @@ def create_model_bricks(z_dim):
     return encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp
 
 
-def create_training_computation_graphs(z_dim, discriminative_regularization, classifer,
-        reconstruction_factor, kl_factor, discriminative_factor):
+def create_training_computation_graphs(z_dim, discriminative_regularization,
+                                       classifer, reconstruction_factor,
+                                       kl_factor, discriminative_factor):
     x = tensor.tensor4('features')
     pi = numpy.cast[theano.config.floatX](numpy.pi)
 
@@ -336,10 +338,12 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=[1, 2, 3])
 
-        total_reconstruction_term = reconstruction_factor * reconstruction_term + discriminative_factor * discriminative_term
+        total_reconstruction_term = reconstruction_factor * \
+            reconstruction_term + discriminative_factor * discriminative_term
         cost = (kl_factor * kl_term - total_reconstruction_term).mean()
 
-        return ComputationGraph([cost, kl_term, reconstruction_term, discriminative_term])
+        return ComputationGraph([cost, kl_term,
+                                 reconstruction_term, discriminative_term])
 
     cg = create_computation_graph()
     with batch_normalization(encoder_convnet, encoder_mlp,
@@ -349,8 +353,8 @@ def create_training_computation_graphs(z_dim, discriminative_regularization, cla
     return cg, bn_cg, variance_parameters
 
 
-def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization, classifier,
-        monitor_every, checkpoint_every, dataset, color_convert,
+def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
+        classifier, monitor_every, checkpoint_every, dataset, color_convert,
         reconstruction_factor, kl_factor, discriminative_factor):
 
     if dataset:
@@ -368,7 +372,8 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization, c
 
     # Compute parameter updates for the batch normalization population
     # statistics. They are updated following an exponential moving average.
-    rval = create_training_computation_graphs(z_dim, discriminative_regularization, classifier,
+    rval = create_training_computation_graphs(
+                z_dim, discriminative_regularization, classifier,
                 reconstruction_factor, kl_factor, discriminative_factor)
     cg, bn_cg, variance_parameters = rval
 
@@ -406,17 +411,20 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization, c
         avg_discriminative_term = discriminative_term.mean(axis=0)
         avg_discriminative_term.name = 'avg_discriminative_term'
         monitored_quantities_list.append(
-            [cost, avg_kl_term, avg_reconstruction_term, avg_discriminative_term])
+            [cost, avg_kl_term, avg_reconstruction_term,
+             avg_discriminative_term])
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
         updates=extra_updates, after_epoch=False, before_first_epoch=True,
         every_n_epochs=monitor_every)
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities_list[1], valid_monitor_stream, prefix="valid",
-        after_epoch=False, before_first_epoch=False, every_n_epochs=monitor_every)
+        after_epoch=False, before_first_epoch=False,
+        every_n_epochs=monitor_every)
 
     # Prepare checkpoint
-    checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every, use_cpickle=True)
+    checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every,
+                            use_cpickle=True)
 
     extensions = [Timing(), FinishAfter(after_n_epochs=75), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
@@ -426,7 +434,8 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization, c
     if oldmodel is not None:
         print("Initializing parameters with old model {}".format(oldmodel))
         saved_model = load(oldmodel)
-        main_loop.model.set_parameter_values(saved_model.model.get_parameter_values())
+        main_loop.model.set_parameter_values(
+            saved_model.model.get_parameter_values())
         del saved_model
 
     main_loop.run()
@@ -438,29 +447,37 @@ if __name__ == "__main__":
         description="Train a VAE on a fuel dataset")
     parser.add_argument("--regularize", action='store_true',
                         help="apply discriminative regularization")
-    parser.add_argument('--classifier', dest='classifier', type=str, default="celeba_classifier.zip")
-    parser.add_argument('--model', dest='model', type=str, default="celeba_vae_regularization.zip")
+    parser.add_argument('--classifier', dest='classifier', type=str,
+                        default="celeba_classifier.zip")
+    parser.add_argument('--model', dest='model', type=str,
+                        default="celeba_vae_regularization.zip")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
-                default=100, help="Size of each mini-batch")
+                        default=100, help="Size of each mini-batch")
     parser.add_argument("--z-dim", type=int, dest="z_dim",
-                default=1000, help="Z-vector dimension")
-    parser.add_argument("--reconstruction-factor", type=float, dest="reconstruction_factor",
-                default=1.0, help="Scaling Factor for reconstruction term")
+                        default=1000, help="Z-vector dimension")
+    parser.add_argument("--reconstruction-factor", type=float,
+                        dest="reconstruction_factor", default=1.0,
+                        help="Scaling Factor for reconstruction term")
     parser.add_argument("--kl-factor", type=float, dest="kl_factor",
-                default=1.0, help="Scaling Factor for KL term")
-    parser.add_argument("--discriminative-factor", type=float, dest="discriminative_factor",
-                default=1.0, help="Scaling Factor for discriminative term")
+                        default=1.0, help="Scaling Factor for KL term")
+    parser.add_argument("--discriminative-factor", type=float,
+                        dest="discriminative_factor", default=1.0,
+                        help="Scaling Factor for discriminative term")
     parser.add_argument("--monitor-every", type=int, dest="monitor_every",
-                default=5, help="Frequency in epochs for monitoring")
-    parser.add_argument("--checkpoint-every", type=int, dest="checkpoint_every",
-                default=5, help="Frequency in epochs for checkpointing")
+                        default=5, help="Frequency in epochs for monitoring")
+    parser.add_argument("--checkpoint-every", type=int,
+                        dest="checkpoint_every", default=5,
+                        help="Frequency in epochs for checkpointing")
     parser.add_argument('--dataset', dest='dataset', default=None,
-                help="Use a different dataset for training.")
-    parser.add_argument('--color-convert', dest='color_convert', default=False, \
-                action='store_true', help="Convert source dataset to color from grayscale.")
+                        help="Use a different dataset for training.")
+    parser.add_argument('--color-convert', dest='color_convert',
+                        default=False, action='store_true',
+                        help="Convert source dataset to color from grayscale.")
     parser.add_argument("--oldmodel", type=str, default=None,
-                help="Use a model file created by a previous run as a starting point for parameters")
+                        help="Use a model file created by a previous run as\
+                        a starting point for parameters")
     args = parser.parse_args()
-    run(args.batch_size, args.model, args.z_dim, args.oldmodel, args.regularize, args.classifier,
-        args.monitor_every, args.checkpoint_every, args.dataset, args.color_convert,
+    run(args.batch_size, args.model, args.z_dim, args.oldmodel,
+        args.regularize, args.classifier, args.monitor_every,
+        args.checkpoint_every, args.dataset, args.color_convert,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
