@@ -310,11 +310,8 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
             (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
         ).sum(axis=[1, 2, 3])
 
-        # FIXME: this is maybe the dumbest way to make [0.0] * batch_size ...
-        discriminative_term = 0.0 * (
-            tensor.log(2 * pi) + 2 * log_sigma +
-            (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
-        ).sum(axis=[1, 2, 3])
+
+        discriminative_term = tensor.zeros_like(kl_term)
         if discriminative_regularization:
             # Propagate both the input and the reconstruction through the
             # classifier
