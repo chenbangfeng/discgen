@@ -1,4 +1,4 @@
-"""Trains a VAE on the CelebA dataset."""
+"""Trains a VAE on any fuel 64x64 image dataset."""
 import argparse
 import logging
 

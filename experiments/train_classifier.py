@@ -1,4 +1,4 @@
-"""Trains the CelebA classifier."""
+"""Trains a CelebA-like classifier with up to 64 attributes."""
 import argparse
 import logging
 

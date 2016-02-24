@@ -11,6 +11,7 @@ from fuel.streams import DataStream
 from fuel.transformers import AgnosticSourcewiseTransformer
 from fuel.datasets import H5PYDataset
 from fuel.transformers.defaults import uint8_pixels_to_floatX
+from fuel.utils import find_in_data_path
 from matplotlib import cm, pyplot
 from mpl_toolkits.axes_grid1 import ImageGrid
 from six.moves import zip, cPickle
@@ -125,6 +126,13 @@ def create_svhn_streams(training_batch_size, monitoring_batch_size):
 
 
 class Colorize(AgnosticSourcewiseTransformer):
+    """Triples a grayscale image to convert it to color.
+
+    This transformer can be used to adapt a one one-channel
+    grayscale image to a network that expects three color
+    channels by simply replictaing the single channel
+    three times.
+    """
     def __init__(self, data_stream, **kwargs):
         super(Colorize, self).__init__(
              data_stream=data_stream,
@@ -165,18 +173,7 @@ def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
     img_size = (64, 64)
     sources = ('features', 'targets') if include_targets else ('features',)
 
-    file_found = False
-    cur_path_index = 0
-    while not file_found and cur_path_index < len(fuel.config.data_path):
-        data_path = fuel.config.data_path[cur_path_index]
-        dataset_fname = os.path.join(data_path, filename+'.hdf5')
-        if os.path.isfile(dataset_fname):
-            file_found = True
-        cur_path_index = cur_path_index + 1
-    if not file_found:
-        print "data set {} not found, exiting".format(dataset_fname)
-        sys.exit(1)
-
+    dataset_fname = find_in_data_path(filename+'.hdf5')
     data_train = H5PYDataset(dataset_fname, which_sets=['train'], sources=sources)
     data_valid = H5PYDataset(dataset_fname, which_sets=['valid'], sources=sources)
     data_test = H5PYDataset(dataset_fname, which_sets=['test'], sources=sources)
@@ -224,6 +221,20 @@ def create_cifar10_streams(training_batch_size, monitoring_batch_size):
                           monitoring_batch_size)
 
 class Scrubber(AgnosticSourcewiseTransformer):
+    """Used to whitelist selected labels for training.
+
+    This transformer zeros out all but selected attribute
+    labels for training. This allows custom classifiers to
+    be built on a subset of available features
+
+    Parameters
+    ----------
+    allowed : list of int
+        Whitelist of indexes to allow in training. For example,
+        passing [4, 7] means only labels at positions 4 and 7
+        will be used for training, and all others will be
+        zeroed out.
+    """
     def __init__(self, data_stream, allowed, **kwargs):
         super(Scrubber, self).__init__(
              data_stream=data_stream,
