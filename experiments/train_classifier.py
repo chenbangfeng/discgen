@@ -21,7 +21,7 @@ from blocks.serialization import load
 from blocks.roles import OUTPUT
 from theano import tensor
 
-from discgen.utils import create_celeba_streams, create_custom_streams
+from discgen.utils import create_custom_streams
 
 
 def create_model_bricks():
@@ -109,19 +109,15 @@ def create_training_computation_graphs():
 
 
 def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
-        dataset, color_convert, allowed):
+        dataset, color_convert, allowed, stretch):
 
-    if dataset:
-        streams = create_custom_streams(filename=dataset,
-                                        training_batch_size=batch_size,
-                                        monitoring_batch_size=batch_size,
-                                        include_targets=True,
-                                        color_convert=color_convert)
-    else:
-        streams = create_celeba_streams(training_batch_size=batch_size,
-                                        monitoring_batch_size=batch_size,
-                                        include_targets=True,
-                                        allowed=allowed)
+    streams = create_custom_streams(filename=dataset,
+                                    training_batch_size=batch_size,
+                                    monitoring_batch_size=batch_size,
+                                    include_targets=True,
+                                    color_convert=color_convert,
+                                    allowed=allowed,
+                                    stretch=stretch)
 
     main_loop_stream = streams[0]
     train_monitor_stream = streams[1]
@@ -189,6 +185,9 @@ if __name__ == "__main__":
                         default="celeba_classifier.zip")
     parser.add_argument("--allowed", dest='allowed', type=str, default=None,
                         help="Only allow whitelisted labels L1,L2,...")
+    parser.add_argument("--stretch", dest='stretch',
+                        default=False, action='store_true',
+                        help="Stretch dataset labels to standard length")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
                         default=100, help="Size of each mini-batch")
     parser.add_argument("--monitor-every", type=int, dest="monitor_every",
@@ -210,4 +209,5 @@ if __name__ == "__main__":
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
     run(args.batch_size, args.classifier, args.oldmodel, args.monitor_every,
-        args.checkpoint_every, args.dataset, args.color_convert, allowed)
+        args.checkpoint_every, args.dataset, args.color_convert, allowed,
+        args.stretch)

@@ -144,7 +144,7 @@ class Colorize(AgnosticSourcewiseTransformer):
 
 def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
                           include_targets=False, color_convert=False,
-                          allowed=None):
+                          allowed=None, stretch=False):
     """Creates data streams from fuel hdf5 file.
 
     Currently features must be 64x64.
@@ -192,7 +192,13 @@ def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
                     lambda s: Colorize(s, which_sources=('features',)),
                     results))
 
-    # wrap streams in scrubber if not all labels are allowed
+    # wrap labels in stretcher if requested
+    if stretch:
+        results = tuple(map(
+                    lambda s: StretchLabels(s, which_sources=('targets',)),
+                    results))
+
+    # wrap labels in scrubber if not all labels are allowed
     if allowed:
         results = tuple(map(
                     lambda s: Scrubber(s, allowed=allowed,
@@ -255,6 +261,33 @@ class Scrubber(AgnosticSourcewiseTransformer):
 
     def transform_any_source(self, source, _):
         return [a*b for a, b in zip(self.allowed, source)]
+
+
+class StretchLabels(AgnosticSourcewiseTransformer):
+    """Used to stretch a set of vectors by zero-padding.
+
+    This transformer appends zeros to a vector to get it
+    to a predefined length.
+
+    Parameters
+    ----------
+    length : int
+        Target lenth of vector.
+    """
+    def __init__(self, data_stream, length=64, **kwargs):
+        super(StretchLabels, self).__init__(
+             data_stream=data_stream,
+             produces_examples=data_stream.produces_examples,
+             **kwargs)
+        self.length = length
+
+    def transform_any_source(self, source, _):
+        if len(source > 0):
+            npad = self.length - len(source[0])
+            return [np.pad(a, pad_width=(0, npad), mode='constant',
+                           constant_values=0) for a in source]
+        else:
+            return source
 
 
 def create_celeba_streams(training_batch_size, monitoring_batch_size,
