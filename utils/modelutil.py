@@ -181,8 +181,8 @@ def sample_random(model, numsamples):
     print("Shape: {}".format(samples.shape))
     return samples
 
-def compute_splash(rows, cols, dim, space, circular, gaussian):
-    lerpv = get_lerpv_by_type(circular, gaussian)
+def compute_splash(rows, cols, dim, space, spherical, gaussian):
+    lerpv = get_lerpv_by_type(spherical, gaussian)
 
     u_list = np.zeros((rows, cols, dim))
     # compute anchors
@@ -300,33 +300,49 @@ def lerp_circle_gaussian(val, low, high):
     circle_lerped_gau = lerp_circle(val, low_gau_shifted, high_gau_shifted)
     return norm.ppf(circle_lerped_gau + offset)
 
-def get_lerpv_by_type(circular, gaussian):
-    if circular and gaussian:
-        return lerp_circle_gaussian
-    elif circular:
-        return lerp_circle
+# http://stackoverflow.com/a/2880012/1010653
+def slerp(val, low, high):
+    omega = np.arccos(np.dot(low/np.linalg.norm(low), high/np.linalg.norm(high)))
+    so = np.sin(omega)
+    return np.sin((1.0-val)*omega) / so * low + np.sin(val*omega)/so * high
+
+def slerp_gaussian(val, low, high):
+    offset = norm.cdf(np.zeros_like(low))  # offset is just [0.5, 0.5, ...]
+    low_gau_shifted = norm.cdf(low) - offset
+    high_gau_shifted = norm.cdf(high) - offset
+    circle_lerped_gau = slerp(val, low_gau_shifted, high_gau_shifted)
+    epsilon = 0.001
+    clipped_sum = np.clip(circle_lerped_gau + offset, epsilon, 1.0 - epsilon)
+    result = norm.ppf(clipped_sum)
+    return result
+
+def get_lerpv_by_type(spherical, gaussian):
+    if spherical and gaussian:
+        return slerp_gaussian
+    elif spherical:
+        return slerp
     elif gaussian:
         return lerp_gaussian
     else:
         return lerp
 
-def compute_gradient(rows, cols, dim, analogy, anchors, circular, gaussian):
-    lerpv = get_lerpv_by_type(circular, gaussian)
+def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
+    lerpv = get_lerpv_by_type(spherical, gaussian)
 
     numsamples = rows * cols
     u_list = np.zeros((numsamples, dim))
     if anchors:
         xmin_ymin, xmax_ymin, xmin_ymax = anchors[0:3]
     else:
-        xmin_ymin = np.random.normal(0, 1, (1, dim))
-        xmax_ymin = np.random.normal(0, 1, (1, dim))
-        xmin_ymax = np.random.normal(0, 1, (1, dim))
+        xmin_ymin = np.random.normal(0, 1, dim)
+        xmax_ymin = np.random.normal(0, 1, dim)
+        xmin_ymax = np.random.normal(0, 1, dim)
     if(analogy):
         xmax_ymax = xmin_ymax + (xmax_ymin - xmin_ymin)
     elif anchors:
         xmax_ymax = anchors[3]
     else:
-        xmax_ymax = np.random.normal(0, 1, (1, dim))
+        xmax_ymax = np.random.normal(0, 1, dim)
 
     for y in range(rows):
         y_frac = y / (rows - 1)
