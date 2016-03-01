@@ -41,7 +41,27 @@ def get_image_vectors(model, images):
     examples, latents = encoder_function(images)
     return latents
 
-def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anchors, splash, spacing, analogy, tight, save_path):
+# returns new version of images, rows, cols
+def add_shoulders(images, anchor_images, rows, cols):
+    ncols = cols + 2
+    nimages = []
+    cur_im = 0
+    for j in range(rows):
+        for i in range(ncols):
+            if i == 0 and j == 0:
+                nimages.append(anchor_images[0])
+            elif i == 0 and j == rows-1:
+                nimages.append(anchor_images[1])
+            elif i == ncols-1 and j == 0:
+                nimages.append(anchor_images[2])
+            elif i > 0 and i < ncols-1:
+                nimages.append(images[cur_im])
+                cur_im = cur_im + 1
+            else:
+                nimages.append(None)
+    return nimages, rows, ncols
+
+def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy, tight, shoulders, save_path):
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
     decoder_convnet, = selector.select('/decoder_convnet').bricks
@@ -69,6 +89,9 @@ def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anc
 
     print('Sampling...')
     samples = sampling_function()
+
+    if shoulders:
+        samples, rows, cols = add_shoulders(samples, anchor_images, rows, cols)
 
     print('Preparing image grid...')
     img = img_grid(samples, rows, cols, not tight)
@@ -112,6 +135,8 @@ if __name__ == "__main__":
                         help="Only allow blacklisted labels L1,L2,...")
     parser.add_argument('--passthrough', dest='passthrough', default=False, action='store_true',
                         help="Use originals instead of reconstructions")
+    parser.add_argument('--shoulders', dest='shoulders', default=False, action='store_true',
+                        help="Append anchors to left/right columns")
     parser.add_argument('--encoder', dest='encoder', default=False, action='store_true',
                         help="Ouput dataset as encoded vectors")
     args = parser.parse_args()
@@ -145,4 +170,4 @@ if __name__ == "__main__":
         anchors = None
 
     reconstruct_grid(model, args.rows, args.cols, args.flat, args.gradient, args.spherical, args.gaussian,
-        anchors, args.splash, args.spacing, args.analogy, args.tight, args.save_path)
+        anchors, anchor_images, args.splash, args.spacing, args.analogy, args.tight, args.shoulders, args.save_path)

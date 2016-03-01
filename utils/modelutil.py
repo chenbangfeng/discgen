@@ -109,7 +109,8 @@ def make_flat(z_dim, cols, rows, gaussian_prior=True, interleaves=0, shuffles=0)
     return u
 
 def img_grid(arr, rows, cols, with_space):
-    N, channels, height, width = arr.shape
+    N = len(arr)
+    channels, height, width = arr[0].shape
 
     total_height = rows * height
     total_width  = cols * width
@@ -343,7 +344,7 @@ def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
 
     numsamples = rows * cols
     u_list = np.zeros((numsamples, dim))
-    if anchors != None:
+    if anchors is not None:
         # xmin_ymin, xmax_ymin, xmin_ymax = anchors[0:3]
         xmin_ymin, xmin_ymax, xmax_ymin = anchors[0:3]
     else:
