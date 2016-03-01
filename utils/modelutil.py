@@ -14,6 +14,11 @@ from PIL import Image
 from blocks.main_loop import MainLoop
 from blocks.model import Model
 from blocks.config import config
+from fuel.datasets.hdf5 import H5PYDataset
+from fuel.utils import find_in_data_path
+from fuel.transformers.defaults import uint8_pixels_to_floatX
+from fuel.schemes import SequentialExampleScheme
+from fuel.streams import DataStream
 
 from scipy.special import ndtri, ndtr
 from scipy.stats import norm
@@ -116,17 +121,19 @@ def img_grid(arr, rows, cols, with_space):
     I = np.zeros((channels, total_height, total_width))
     I.fill(1)
 
-    for i in xrange(N):
-        r = i // cols
-        c = i % cols
+    for i in xrange(rows*cols):
+        if i < N:
+            r = i // cols
+            c = i % cols
 
-        this = arr[i]
+            cur_im = arr[i]
 
-        if with_space:
-            offset_y, offset_x = r*height+r, c*width+c
-        else:
-            offset_y, offset_x = r*height, c*width
-        I[0:channels, offset_y:(offset_y+height), offset_x:(offset_x+width)] = this
+            if cur_im is not None:
+                if with_space:
+                    offset_y, offset_x = r*height+r, c*width+c
+                else:
+                    offset_y, offset_x = r*height, c*width
+                I[0:channels, offset_y:(offset_y+height), offset_x:(offset_x+width)] = cur_im
     
     if(channels == 1):
         out = I.reshape( (total_height, total_width) )
@@ -181,15 +188,20 @@ def sample_random(model, numsamples):
     print("Shape: {}".format(samples.shape))
     return samples
 
-def compute_splash(rows, cols, dim, space, spherical, gaussian):
+def compute_splash(rows, cols, dim, space, anchors, spherical, gaussian):
     lerpv = get_lerpv_by_type(spherical, gaussian)
 
     u_list = np.zeros((rows, cols, dim))
     # compute anchors
+    cur_anchor = 0
     for y in range(rows):
         for x in range(cols):
             if y%space == 0 and x%space == 0:
-                u_list[y,x,:] = np.random.normal(0,1, (1, dim))
+                if anchors != None:
+                    u_list[y,x,:] = anchors[cur_anchor]
+                    cur_anchor = cur_anchor + 1
+                else:
+                    u_list[y,x,:] = np.random.normal(0,1, (1, dim))
     # interpolate horizontally
     for y in range(rows):
         for x in range(cols):
@@ -331,15 +343,16 @@ def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
 
     numsamples = rows * cols
     u_list = np.zeros((numsamples, dim))
-    if anchors:
-        xmin_ymin, xmax_ymin, xmin_ymax = anchors[0:3]
+    if anchors != None:
+        # xmin_ymin, xmax_ymin, xmin_ymax = anchors[0:3]
+        xmin_ymin, xmin_ymax, xmax_ymin = anchors[0:3]
     else:
         xmin_ymin = np.random.normal(0, 1, dim)
         xmax_ymin = np.random.normal(0, 1, dim)
         xmin_ymax = np.random.normal(0, 1, dim)
     if(analogy):
         xmax_ymax = xmin_ymax + (xmax_ymin - xmin_ymin)
-    elif anchors:
+    elif anchors != None:
         xmax_ymax = anchors[3]
     else:
         xmax_ymax = np.random.normal(0, 1, dim)
@@ -351,38 +364,6 @@ def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
         for x in range(cols):
             x_frac = x / (cols - 1)
             xcur_ycur = lerpv(x_frac, xmin_ycur, xmax_ycur)
-            n = y * cols + x
-            u_list[n:n+1,:] = xcur_ycur
-
-    return u_list
-
-def compute_gradient_oldy(rows, cols, dim, analogy, anchors):
-    numsamples = rows * cols
-    u_list = np.zeros((numsamples, dim))
-    if anchors:
-        xmin_ymin, xmax_ymin, xmin_ymax = anchors[0:3]
-    else:
-        xmin_ymin = np.random.normal(0, 1, (1, dim))
-        xmax_ymin = np.random.normal(0, 1, (1, dim))
-        xmin_ymax = np.random.normal(0, 1, (1, dim))
-    if(analogy):
-        xmax_ymax = xmin_ymax + (xmax_ymin - xmin_ymin)
-    elif anchors:
-        xmax_ymax = anchors[3]
-    else:
-        xmax_ymax = np.random.normal(0, 1, (1, dim))
-
-    xmin_ymin_gau = ndtr(xmin_ymin)
-    xmax_ymin_gau = ndtr(xmax_ymin)
-    xmin_ymax_gau = ndtr(xmin_ymax)
-    xmax_ymax_gau = ndtr(xmax_ymax)
-
-    for y in range(rows):
-        xmin_ycur_gau = (((rows - y - 1.0) * xmin_ymin_gau) + (1.0 * y * xmin_ymax_gau)) / (rows - 1.0)
-        xmax_ycur_gau = (((rows - y - 1.0) * xmax_ymin_gau) + (1.0 * y * xmax_ymax_gau)) / (rows - 1.0)
-        for x in range(cols):
-            xcur_ycur_gau = (((cols - x - 1.0) * xmin_ycur_gau) + (1.0 * x * xmax_ycur_gau)) / (cols - 1.0)
-            xcur_ycur = ndtri(xcur_ycur_gau)
             n = y * cols + x
             u_list[n:n+1,:] = xcur_ycur
 
@@ -461,3 +442,35 @@ def build_reconstruct_terms_function(model):
 def reconstruct_terms(reconstruct_function, source_im):
     recon_im, z_terms = reconstruct_function(source_im)
     return recon_im, z_terms
+
+def get_anchor_images(dataset, split, numanchors, allowed, prohibited, include_targets=True):
+    sources = ('features', 'targets') if include_targets else ('features',)
+    splits = ('train', 'valid', 'test') if split == "all" else (split,)
+
+    dataset_fname = find_in_data_path("{}.hdf5".format(dataset))
+    datastream = H5PYDataset(dataset_fname, which_sets=splits,
+                             sources=sources)
+    datastream.default_transformers = uint8_pixels_to_floatX(('features',))
+
+    train_stream = DataStream.default_stream(
+        dataset=datastream,
+        iteration_scheme=SequentialExampleScheme(datastream.num_examples))
+    it = train_stream.get_epoch_iterator()    
+
+    anchors = []
+    while len(anchors) < numanchors:
+        cur = it.next()
+        candidate_passes = True
+        if allowed:
+            for p in allowed:
+                if(cur[1][p] != 1):
+                    candidate_passes = False
+        if prohibited:
+            for p in prohibited:
+                if(cur[1][p] != 0):
+                    candidate_passes = False
+
+        if candidate_passes:
+            anchors.append(cur[0])
+
+    return np.array(anchors)
