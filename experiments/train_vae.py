@@ -305,11 +305,11 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
         kl_term = 0.5 * (
             tensor.exp(2 * log_sigma_phi) + mu_phi ** 2 - 2 * log_sigma_phi - 1
         ).sum(axis=1)
+
         reconstruction_term = -0.5 * (
             tensor.log(2 * pi) + 2 * log_sigma +
             (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
         ).sum(axis=[1, 2, 3])
-
 
         discriminative_term = tensor.zeros_like(kl_term)
         if discriminative_regularization:
@@ -466,7 +466,7 @@ if __name__ == "__main__":
                         dest="checkpoint_every", default=5,
                         help="Frequency in epochs for checkpointing")
     parser.add_argument('--dataset', dest='dataset', default=None,
-                        help="Use a different dataset for training.")
+                        help="Dataset for training.")
     parser.add_argument('--color-convert', dest='color_convert',
                         default=False, action='store_true',
                         help="Convert source dataset to color from grayscale.")
