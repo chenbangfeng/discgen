@@ -341,6 +341,7 @@ def get_lerpv_by_type(spherical, gaussian):
 
 def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
     lerpv = get_lerpv_by_type(spherical, gaussian)
+    hyper = False
 
     numsamples = rows * cols
     u_list = np.zeros((numsamples, dim))
@@ -353,6 +354,14 @@ def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
         xmin_ymax = np.random.normal(0, 1, dim)
     if(analogy):
         xmax_ymax = xmin_ymax + (xmax_ymin - xmin_ymin)
+        if hyper:
+            tl = xmin_ymin
+            tr = xmax_ymin
+            bl = xmin_ymax
+            xmax_ymax = bl + (tr - tl)
+            xmin_ymax = bl - (tr - tl)
+            xmax_ymin = tr + (tl - bl)
+            xmin_ymin = xmin_ymax + (xmax_ymin - xmax_ymax)
     elif anchors != None:
         xmax_ymax = anchors[3]
     else:
