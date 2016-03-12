@@ -26,7 +26,7 @@ from blocks.utils import find_bricks, shared_floatx
 from theano import tensor
 
 from discgen.utils import create_celeba_streams, create_custom_streams
-
+from utils.samplecheckpoint import SampleCheckpoint
 
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
@@ -351,7 +351,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
 
 
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
-        classifier, monitor_every, checkpoint_every, dataset, color_convert,
+        classifier, monitor_every, checkpoint_every, dataset, color_convert, subdir,
         reconstruction_factor, kl_factor, discriminative_factor):
 
     if dataset:
@@ -423,8 +423,10 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every,
                             use_cpickle=True)
 
-    extensions = [Timing(), FinishAfter(after_n_epochs=75), train_monitoring,
-                  valid_monitoring, checkpoint, Printing(), ProgressBar()]
+    extensions = [Timing(), FinishAfter(after_n_epochs=75), checkpoint, 
+                  train_monitoring, valid_monitoring, 
+                  SampleCheckpoint(image_size=(64, 64), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
+                  Printing(), ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
 
@@ -473,8 +475,11 @@ if __name__ == "__main__":
     parser.add_argument("--oldmodel", type=str, default=None,
                         help="Use a model file created by a previous run as\
                         a starting point for parameters")
+    parser.add_argument("--subdir", dest='subdir', type=str, default="output",
+                        help="Subdirectory for output files (images)")
     args = parser.parse_args()
     run(args.batch_size, args.model, args.z_dim, args.oldmodel,
         args.regularize, args.classifier, args.monitor_every,
         args.checkpoint_every, args.dataset, args.color_convert,
+        args.subdir,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
