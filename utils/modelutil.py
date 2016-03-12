@@ -14,11 +14,6 @@ from PIL import Image
 from blocks.main_loop import MainLoop
 from blocks.model import Model
 from blocks.config import config
-from fuel.datasets.hdf5 import H5PYDataset
-from fuel.utils import find_in_data_path
-from fuel.transformers.defaults import uint8_pixels_to_floatX
-from fuel.schemes import SequentialExampleScheme
-from fuel.streams import DataStream
 
 from scipy.special import ndtri, ndtr
 from scipy.stats import norm
@@ -198,7 +193,7 @@ def compute_splash(rows, cols, dim, space, anchors, spherical, gaussian):
     for y in range(rows):
         for x in range(cols):
             if y%space == 0 and x%space == 0:
-                if anchors != None:
+                if anchors is not None:
                     u_list[y,x,:] = anchors[cur_anchor]
                     cur_anchor = cur_anchor + 1
                 else:
@@ -453,34 +448,3 @@ def reconstruct_terms(reconstruct_function, source_im):
     recon_im, z_terms = reconstruct_function(source_im)
     return recon_im, z_terms
 
-def get_anchor_images(dataset, split, numanchors, allowed, prohibited, include_targets=True):
-    sources = ('features', 'targets') if include_targets else ('features',)
-    splits = ('train', 'valid', 'test') if split == "all" else (split,)
-
-    dataset_fname = find_in_data_path("{}.hdf5".format(dataset))
-    datastream = H5PYDataset(dataset_fname, which_sets=splits,
-                             sources=sources)
-    datastream.default_transformers = uint8_pixels_to_floatX(('features',))
-
-    train_stream = DataStream.default_stream(
-        dataset=datastream,
-        iteration_scheme=SequentialExampleScheme(datastream.num_examples))
-    it = train_stream.get_epoch_iterator()    
-
-    anchors = []
-    while len(anchors) < numanchors:
-        cur = it.next()
-        candidate_passes = True
-        if allowed:
-            for p in allowed:
-                if(cur[1][p] != 1):
-                    candidate_passes = False
-        if prohibited:
-            for p in prohibited:
-                if(cur[1][p] != 0):
-                    candidate_passes = False
-
-        if candidate_passes:
-            anchors.append(cur[0])
-
-    return np.array(anchors)
