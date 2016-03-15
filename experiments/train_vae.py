@@ -423,9 +423,10 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every,
                             use_cpickle=True)
 
+    # TODO: why does z_dim=foo become foo/2?
     extensions = [Timing(), FinishAfter(after_n_epochs=75), checkpoint, 
                   train_monitoring, valid_monitoring, 
-                  SampleCheckpoint(image_size=(64, 64), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
+                  SampleCheckpoint(z_dim=z_dim/2, image_size=(64, 64), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
                   Printing(), ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)

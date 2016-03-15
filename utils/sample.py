@@ -110,30 +110,28 @@ def add_shoulders(images, anchor_images, rows, cols):
                 nimages.append(None)
     return nimages, rows, ncols
 
-def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy, tight, shoulders, save_path):
+# returns list of latent variables to support rows x cols 
+def generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy):
+    if flat:
+        z = make_flat(z_dim, cols, rows)
+    elif gradient:
+        z = compute_gradient(rows, cols, z_dim, analogy, anchors, spherical, gaussian)
+    elif splash:
+        z = compute_splash(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
+    else:
+        z = np.random.normal(loc=0, scale=1, size=(rows * cols, z_dim))
+
+    return z
+
+def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path):
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
     decoder_convnet, = selector.select('/decoder_convnet').bricks
 
-    # reset the random generator
-    # del model._theano_rng
-    # del model._theano_seed
-    # model.seed_rng = np.random.RandomState(config.default_seed)
-
     print('Building computation graph...')
-
-    z_dim = decoder_mlp.input_dim
-    if flat:
-        z = shared_floatx(make_flat(z_dim, cols, rows))
-    elif gradient:
-        z = shared_floatx(compute_gradient(rows, cols, z_dim, analogy, anchors, spherical, gaussian))
-    elif splash:
-        z = shared_floatx(compute_splash(rows, cols, z_dim, spacing, anchors, spherical, gaussian))
-    else:
-        z = Random().theano_rng.normal(size=(rows * cols, z_dim),
-                                       dtype=theano.config.floatX)
+    sz = shared_floatx(z)
     mu_theta = decoder_convnet.apply(
-        decoder_mlp.apply(z).reshape(
+        decoder_mlp.apply(sz).reshape(
             (-1,) + decoder_convnet.get_dim('input_')))
     computation_graph = ComputationGraph([mu_theta])
 
@@ -150,8 +148,14 @@ def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anc
     print('Preparing image grid...')
     img = img_grid(samples, rows, cols, not tight)
     img.save(save_path)
-    # img.save("{0}/{1}.png".format(subdir, filename))
-    # plot_image_grid(samples, nrows, ncols, save_path)
+
+
+def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy, tight, shoulders, save_path):
+    selector = Selector(model.top_bricks)
+    decoder_mlp, = selector.select('/decoder_mlp').bricks
+    z_dim = decoder_mlp.input_dim
+    z = generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy)
+    grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path)
 
 
 if __name__ == "__main__":
@@ -167,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument('--flat', dest='flat', default=False, action='store_true')
     parser.add_argument('--analogy', dest='analogy', default=False, action='store_true')
     parser.add_argument('--gradient', dest='gradient', default=False, action='store_true')
-    parser.add_argument('--spherical', dest='spherical', default=False, action='store_true')
+    parser.add_argument('--linear', dest='linear', default=False, action='store_true')
     parser.add_argument('--gaussian', dest='gaussian', default=False, action='store_true')
     parser.add_argument('--tight', dest='tight', default=False, action='store_true')
     parser.add_argument("--seed", type=int,
@@ -226,5 +230,11 @@ if __name__ == "__main__":
     else:
         anchors = None
 
-    reconstruct_grid(model, args.rows, args.cols, args.flat, args.gradient, args.spherical, args.gaussian,
-        anchors, anchor_images, args.splash, args.spacing, args.analogy, args.tight, args.shoulders, args.save_path)
+    selector = Selector(model.top_bricks)
+    decoder_mlp, = selector.select('/decoder_mlp').bricks
+    z_dim = decoder_mlp.input_dim
+    z = generate_latent_grid(z_dim, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
+            anchors, anchor_images, args.splash, args.spacing, args.analogy)
+    grid_from_latents(z, model, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
+    # reconstruct_grid(model, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
+    #     anchors, anchor_images, args.splash, args.spacing, args.analogy, args.tight, args.shoulders, args.save_path)
