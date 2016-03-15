@@ -28,7 +28,12 @@ from discgen.utils import Colorize
 
 def get_anchor_images(dataset, split, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
     sources = ('features', 'targets') if include_targets else ('features',)
-    splits = ('train', 'valid', 'test') if split == "all" else (split,)
+    if split == "all":
+        splits = ('train', 'valid', 'test')
+    elif split == "nontrain":
+        splits = ('valid', 'test')
+    else:
+        splits = (split,)
 
     dataset_fname = find_in_data_path("{}.hdf5".format(dataset))
     datastream = H5PYDataset(dataset_fname, which_sets=splits,
@@ -180,7 +185,7 @@ if __name__ == "__main__":
                         default=False, action='store_true',
                         help="Convert source dataset to color from grayscale.")
     parser.add_argument('--split', dest='split', default="all",
-                        help="Which split to use from the dataset (train/valid/test/any).")
+                        help="Which split to use from the dataset (train/nontrain/valid/test/any).")
     parser.add_argument("--allowed", dest='allowed', type=str, default=None,
                         help="Only allow whitelisted labels L1,L2,...")
     parser.add_argument("--prohibited", dest='prohibited', type=str, default=None,
