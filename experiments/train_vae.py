@@ -253,7 +253,7 @@ def create_model_bricks(z_dim):
 
 def create_training_computation_graphs(z_dim, discriminative_regularization,
                                        classifer, reconstruction_factor,
-                                       kl_factor, discriminative_factor):
+                                       kl_factor, discriminative_factor, disc_weights):
     x = tensor.tensor4('features')
     pi = numpy.cast[theano.config.floatX](numpy.pi)
 
@@ -273,7 +273,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
     if discriminative_regularization:
         # We add discriminative regularization for the batch-normalized output
         # of the strided layers of the classifier.
-        for layer in classifier_convnet.layers[4::6]:
+        for layer in classifier_convnet.layers[4::3]:
             log_sigma = shared_floatx(
                 numpy.zeros(layer.get_dim('output')),
                 name='{}_log_sigma'.format(layer.name))
@@ -321,7 +321,8 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
 
             # Retrieve activations of interest and compute discriminative
             # regularization reconstruction terms
-            for layer, log_sigma in zip(classifier_convnet.layers[4::6],
+            cur_layer = 0
+            for layer, log_sigma in zip(classifier_convnet.layers[4::3],
                                         variance_parameters[1:]):
                 variable_filter = VariableFilter(roles=[OUTPUT],
                                                  bricks=[layer])
@@ -330,10 +331,12 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
                 d_hat, = variable_filter(acts_hat_cg)
                 log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
 
-                discriminative_term += -0.5 * (
+                discriminative_layer_term = -0.5 * (
                     tensor.log(2 * pi) + 2 * log_sigma +
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=[1, 2, 3])
+                discriminative_term = discriminative_term + (disc_weights[cur_layer] * discriminative_layer_term)
+                cur_layer = cur_layer + 1
 
         total_reconstruction_term = reconstruction_factor * \
             reconstruction_term + discriminative_factor * discriminative_term
@@ -352,7 +355,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
 
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         classifier, monitor_every, checkpoint_every, dataset, color_convert, subdir,
-        reconstruction_factor, kl_factor, discriminative_factor):
+        reconstruction_factor, kl_factor, discriminative_factor, disc_weights):
 
     if dataset:
         streams = create_custom_streams(filename=dataset,
@@ -371,7 +374,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     # statistics. They are updated following an exponential moving average.
     rval = create_training_computation_graphs(
                 z_dim, discriminative_regularization, classifier,
-                reconstruction_factor, kl_factor, discriminative_factor)
+                reconstruction_factor, kl_factor, discriminative_factor, disc_weights)
     cg, bn_cg, variance_parameters = rval
 
     pop_updates = list(
@@ -463,6 +466,9 @@ if __name__ == "__main__":
     parser.add_argument("--discriminative-factor", type=float,
                         dest="discriminative_factor", default=1.0,
                         help="Scaling Factor for discriminative term")
+    parser.add_argument("--discriminative-layer-weights", type=str,
+                        dest="discriminative_layer_weights", default="1,0,1,0,1,0",
+                        help="Weights for each of 6 discriminitive layers")
     parser.add_argument("--monitor-every", type=int, dest="monitor_every",
                         default=5, help="Frequency in epochs for monitoring")
     parser.add_argument("--checkpoint-every", type=int,
@@ -479,8 +485,9 @@ if __name__ == "__main__":
     parser.add_argument("--subdir", dest='subdir', type=str, default="output",
                         help="Subdirectory for output files (images)")
     args = parser.parse_args()
+    disc_weights = map(float, args.discriminative_layer_weights.split(","))
     run(args.batch_size, args.model, args.z_dim, args.oldmodel,
         args.regularize, args.classifier, args.monitor_every,
         args.checkpoint_every, args.dataset, args.color_convert,
         args.subdir,
-        args.reconstruction_factor, args.kl_factor, args.discriminative_factor)
+        args.reconstruction_factor, args.kl_factor, args.discriminative_factor, disc_weights)
