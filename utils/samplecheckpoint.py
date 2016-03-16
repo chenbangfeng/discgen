@@ -19,8 +19,13 @@ class SampleCheckpoint(Checkpoint):
         self.epoch_src = "{0}/sample.png".format(save_subdir)
         self.rows=7
         self.cols=13
+        # self.z = generate_latent_grid(z_dim, rows=self.rows, cols=self.cols, flat=False, gradient=False, spherical=True, gaussian=False,
+        #     anchors=False, anchor_images=None, splash=False, spacing=3, analogy=False)
+        # anchors = np.random.normal(loc=0, scale=1, size=( * , z_dim))
+        anchors = generate_latent_grid(z_dim, rows=((self.rows // 3) + 1), cols=((self.cols // 3) + 1), flat=False, gradient=False,
+            spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, spacing=3, analogy=False)
         self.z = generate_latent_grid(z_dim, rows=self.rows, cols=self.cols, flat=False, gradient=False, spherical=True, gaussian=False,
-            anchors=False, anchor_images=None, splash=False, spacing=3, analogy=False)
+            anchors=anchors, anchor_images=None, splash=True, spacing=3, analogy=False)
         if not os.path.exists(self.save_subdir):
             os.makedirs(self.save_subdir)
 

@@ -119,6 +119,7 @@ def generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian,
     elif splash:
         z = compute_splash(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
     else:
+        # TODO: non-gaussian version
         z = np.random.normal(loc=0, scale=1, size=(rows * cols, z_dim))
 
     return z
