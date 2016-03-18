@@ -26,7 +26,7 @@ from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
 
-def get_anchor_images(dataset, split, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
+def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
     sources = ('features', 'targets') if include_targets else ('features',)
     if split == "all":
         splits = ('train', 'valid', 'test')
@@ -47,6 +47,8 @@ def get_anchor_images(dataset, split, numanchors, allowed, prohibited, color_con
     it = train_stream.get_epoch_iterator()    
 
     anchors = []
+    for i in range(offset):
+        cur = it.next()
     while len(anchors) < numanchors:
         cur = it.next()
         candidate_passes = True
@@ -158,6 +160,20 @@ def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anc
     z = generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy)
     grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path)
 
+def surround_anchors(rows, cols, anchors, rand_anchors):
+    newanchors = []
+    cur_anc = 0
+    cur_rand = 0
+    for r in range(rows):
+        for c in range(cols):
+            if r == 0 or c == 0 or r == rows-1 or c == cols-1:
+                newanchors.append(rand_anchors[cur_rand])
+                cur_rand = cur_rand + 1
+            else:
+                newanchors.append(anchors[cur_anc])
+                cur_anc = cur_anc + 1
+    return newanchors
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
@@ -178,6 +194,8 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int,
                 default=None, help="Optional random seed")
     parser.add_argument('--splash', dest='splash', default=False, action='store_true')
+    parser.add_argument('--encircle', dest='encircle', default=False, action='store_true')
+    parser.add_argument('--partway', dest='partway', type=float, default=None)
     parser.add_argument("--spacing", type=int, default=3,
                         help="spacing of splash grid, w & h must be multiples +1")
     parser.add_argument('--anchors', dest='anchors', default=False, action='store_true',
@@ -191,6 +209,8 @@ if __name__ == "__main__":
                         help="Convert source dataset to color from grayscale.")
     parser.add_argument('--split', dest='split', default="all",
                         help="Which split to use from the dataset (train/nontrain/valid/test/any).")
+    parser.add_argument("--offset", type=int, default=0,
+                        help="data offset to skip")
     parser.add_argument("--allowed", dest='allowed', type=str, default=None,
                         help="Only allow whitelisted labels L1,L2,...")
     parser.add_argument("--prohibited", dest='prohibited', type=str, default=None,
@@ -215,7 +235,7 @@ if __name__ == "__main__":
             allowed = map(int, args.allowed.split(","))
         if(args.prohibited):
             prohibited = map(int, args.prohibited.split(","))
-        anchor_images = get_anchor_images(args.dataset, args.split, args.numanchors, allowed, prohibited, args.color_convert)
+        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.numanchors, allowed, prohibited, args.color_convert)
 
     if args.passthrough:
         print('Preparing image grid...')
@@ -234,6 +254,19 @@ if __name__ == "__main__":
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
     z_dim = decoder_mlp.input_dim
+    if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
+        srows=((args.rows // args.spacing) + 1)
+        scols=((args.cols // args.spacing) + 1)
+        rand_anchors = generate_latent_grid(z_dim, rows=srows, cols=scols, flat=False, gradient=False,
+            spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, spacing=args.spacing, analogy=False)
+        if args.partway is not None:
+            l = len(rand_anchors)
+            clipped_anchors = anchors[:l]
+            anchors = (1.0 - args.partway) * rand_anchors + args.partway * clipped_anchors
+        elif args.encircle:
+            anchors = surround_anchors(srows, scols, anchors, rand_anchors)
+        else:
+            anchors = rand_anchors
     z = generate_latent_grid(z_dim, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
             anchors, anchor_images, args.splash, args.spacing, args.analogy)
     grid_from_latents(z, model, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
