@@ -339,7 +339,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
                 cur_layer = cur_layer + 1
 
         total_reconstruction_term = reconstruction_factor * \
-            reconstruction_term + discriminative_factor * discriminative_term
+            reconstruction_term + 0.5 * discriminative_factor * discriminative_term
         cost = (kl_factor * kl_term - total_reconstruction_term).mean()
 
         return ComputationGraph([cost, kl_term,
