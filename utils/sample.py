@@ -16,6 +16,7 @@ from utils.modelutil import make_flat, compute_gradient, compute_splash, img_gri
 import numpy as np
 import random
 import sys
+from scipy.misc import imread, imsave
 
 from discgen.utils import plot_image_grid
 
@@ -174,6 +175,36 @@ def surround_anchors(rows, cols, anchors, rand_anchors):
                 cur_anc = cur_anc + 1
     return newanchors
 
+def anchors_from_image(fname, channels=3, image_size=(64,64)):
+    rawim = imread(fname);
+    if(channels == 1):
+        im_height, im_width = rawim.shape
+        mixedim = rawim
+    else:
+        im_height, im_width, im_channels = rawim.shape
+        mixedim = np.asarray([rawim[:,:,0], rawim[:,:,1], rawim[:,:,2]])
+
+    pairs = []
+    target_shape = (channels, image_size[0], image_size[1])
+    height, width = image_size
+
+    # first build a list of num images in datastream
+    datastream_images = []
+    steps_y = int(im_height / height)
+    steps_x = int(im_width / width)
+    # while cur_x + width <= im_width and len(datastream_images) < num:
+    for j in range(steps_y):
+        cur_y = j * height
+        for i in range(steps_x):
+            cur_x = i * width
+            if(channels == 1):
+                entry = (mixedim[cur_y:cur_y+height, cur_x:cur_x+width] / 255.0).astype('float32')
+            else:
+                entry = (mixedim[0:im_channels, cur_y:cur_y+height, cur_x:cur_x+width] / 255.0).astype('float32')
+            datastream_images.append(entry)
+
+    return steps_y, steps_x, datastream_images
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
@@ -200,6 +231,8 @@ if __name__ == "__main__":
                         help="spacing of splash grid, w & h must be multiples +1")
     parser.add_argument('--anchors', dest='anchors', default=False, action='store_true',
                         help="use reconstructed images instead of random ones")
+    parser.add_argument('--anchor-image', dest='anchor_image', default=None,
+                        help="use image as source of anchors")
     parser.add_argument("--numanchors", type=int, default=150,
                         help="number of anchors to generate")
     parser.add_argument('--dataset', dest='dataset', default=None,
@@ -236,6 +269,9 @@ if __name__ == "__main__":
         if(args.prohibited):
             prohibited = map(int, args.prohibited.split(","))
         anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.numanchors, allowed, prohibited, args.color_convert)
+
+    if args.anchor_image is not None:
+        _, _, anchor_images = anchors_from_image(args.anchor_image)
 
     if args.passthrough:
         print('Preparing image grid...')
