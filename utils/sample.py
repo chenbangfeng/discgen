@@ -16,6 +16,7 @@ from utils.modelutil import make_flat, compute_gradient, compute_splash, img_gri
 import numpy as np
 import random
 import sys
+import json
 from scipy.misc import imread, imsave
 
 from discgen.utils import plot_image_grid
@@ -27,7 +28,7 @@ from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
 
-def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
+def get_dataset_iterator(dataset, split, include_targets=False):
     sources = ('features', 'targets') if include_targets else ('features',)
     if split == "all":
         splits = ('train', 'valid', 'test')
@@ -45,7 +46,11 @@ def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, c
         dataset=datastream,
         iteration_scheme=SequentialExampleScheme(datastream.num_examples))
 
-    it = train_stream.get_epoch_iterator()    
+    it = train_stream.get_epoch_iterator()
+    return it
+
+def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
+    it = get_dataset_iterator(dataset, split, include_targets)
 
     anchors = []
     for i in range(offset):
@@ -70,7 +75,7 @@ def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, c
 
     return np.array(anchors)
 
-def get_image_vectors(model, images):
+def get_image_encoder_function(model):
     selector = Selector(model.top_bricks)
     encoder_convnet, = selector.select('/encoder_convnet').bricks
     encoder_mlp, = selector.select('/encoder_mlp').bricks
@@ -88,7 +93,10 @@ def get_image_vectors(model, images):
     print('Compiling reconstruction function...')
     encoder_function = theano.function(
         computation_graph.inputs, computation_graph.outputs)
+    return encoder_function
 
+def get_image_vectors(model, images):
+    encoder_funciton = get_image_encoder_function(model)
     print('Encoding...')
     examples, latents = encoder_function(images)
     return latents
@@ -205,6 +213,57 @@ def anchors_from_image(fname, channels=3, image_size=(64,64)):
 
     return steps_y, steps_x, datastream_images
 
+def vector_to_json_array(v):
+    return json.dumps(v.tolist())
+
+def output_vectors(vectors):
+    print("VECTOR OUTPUT BEGIN")
+    print("[")
+    for v in vectors[:-1]:
+        print("{},".format(vector_to_json_array(v)))
+    for v in vectors[-1:]:
+        print("{}".format(vector_to_json_array(v)))
+    print("]")
+    print("VECTOR OUTPUT END")
+
+def stream_output_vectors(model, dataset, split, color_convert=False):
+    encoder_function = get_image_encoder_function(model)
+
+    it = get_dataset_iterator(dataset, split)
+    batch_size = 20
+    done = False
+
+    print("VECTOR OUTPUT BEGIN")
+    print("[")
+
+    while not done:
+        anchors = []
+        try:
+            for i in range(batch_size):
+                cur = it.next()
+                if color_convert:
+                    anchors.append(np.tile(cur[0].reshape(1, 64, 64), (3, 1, 1)))
+                else:
+                    anchors.append(cur[0])
+            anchors_input = np.array(anchors)
+            examples, latents = encoder_function(anchors_input)
+            for v in latents:
+                print("{},".format(vector_to_json_array(v)))
+        except StopIteration:
+            anchors_input = np.array(anchors)
+            examples, latents = encoder_function(anchors_input)
+            # end cut-n-paste
+            for v in latents[:-1]:
+                print("{},".format(vector_to_json_array(v)))
+            for v in latents[-1:]:
+                print("{}".format(vector_to_json_array(v)))
+            done = True
+
+    # for v in vectors[-1:]:
+    #     print("{}".format(vector_to_json_array(v)))
+
+    print("]")
+    print("VECTOR OUTPUT END")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
@@ -286,6 +345,13 @@ if __name__ == "__main__":
         anchors = get_image_vectors(model, anchor_images)
     else:
         anchors = None
+
+    if args.encoder:
+        if anchors is not None:
+            output_vectors(anchors)
+        else:
+            stream_output_vectors(model, args.dataset, args.split)
+        sys.exit(0)
 
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
