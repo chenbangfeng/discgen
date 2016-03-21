@@ -96,7 +96,7 @@ def get_image_encoder_function(model):
     return encoder_function
 
 def get_image_vectors(model, images):
-    encoder_funciton = get_image_encoder_function(model)
+    encoder_function = get_image_encoder_function(model)
     print('Encoding...')
     examples, latents = encoder_function(images)
     return latents
@@ -106,13 +106,14 @@ def add_shoulders(images, anchor_images, rows, cols):
     ncols = cols + 2
     nimages = []
     cur_im = 0
+    n_anchors = len(anchor_images)
     for j in range(rows):
         for i in range(ncols):
-            if i == 0 and j == 0:
+            if i == 0 and j == 0 and n_anchors > 0:
                 nimages.append(anchor_images[0])
-            elif i == 0 and j == rows-1:
+            elif i == 0 and j == rows-1 and n_anchors > 1:
                 nimages.append(anchor_images[1])
-            elif i == ncols-1 and j == 0:
+            elif i == ncols-1 and j == 0 and n_anchors > 2:
                 nimages.append(anchor_images[2])
             elif i > 0 and i < ncols-1:
                 nimages.append(images[cur_im])
@@ -213,18 +214,33 @@ def anchors_from_image(fname, channels=3, image_size=(64,64)):
 
     return steps_y, steps_x, datastream_images
 
+def get_json_vectors(filename):
+    with open(filename) as json_file:
+        json_data = json.load(json_file)
+    return np.array(json_data)
+
 def vector_to_json_array(v):
     return json.dumps(v.tolist())
 
 def output_vectors(vectors):
     print("VECTOR OUTPUT BEGIN")
-    print("[")
+    print("JSON#[")
     for v in vectors[:-1]:
-        print("{},".format(vector_to_json_array(v)))
+        print("JSON#{},".format(vector_to_json_array(v)))
     for v in vectors[-1:]:
-        print("{}".format(vector_to_json_array(v)))
-    print("]")
+        print("JSON#{}".format(vector_to_json_array(v)))
+    print("JSON#]")
     print("VECTOR OUTPUT END")
+
+def anchors_from_offsets(anchor, offsets, x_index, y_index, x_minscale, y_minscale, x_maxscale, y_maxscale):
+    x_offset = offsets[x_index]
+    y_offset = offsets[y_index]
+    newanchors = []
+    newanchors.append(anchor + x_minscale * x_offset + y_minscale * y_offset)
+    newanchors.append(anchor + x_minscale * x_offset + y_maxscale * y_offset)
+    newanchors.append(anchor + x_maxscale * x_offset + y_minscale * y_offset)
+    newanchors.append(anchor + x_maxscale * x_offset + y_maxscale * y_offset)
+    return np.array(newanchors)
 
 def stream_output_vectors(model, dataset, split, color_convert=False):
     encoder_function = get_image_encoder_function(model)
@@ -234,7 +250,7 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
     done = False
 
     print("VECTOR OUTPUT BEGIN")
-    print("[")
+    print("JSON#[")
 
     while not done:
         anchors = []
@@ -248,21 +264,21 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
             anchors_input = np.array(anchors)
             examples, latents = encoder_function(anchors_input)
             for v in latents:
-                print("{},".format(vector_to_json_array(v)))
+                print("JSON#{},".format(vector_to_json_array(v)))
         except StopIteration:
             anchors_input = np.array(anchors)
             examples, latents = encoder_function(anchors_input)
             # end cut-n-paste
             for v in latents[:-1]:
-                print("{},".format(vector_to_json_array(v)))
+                print("JSON#{},".format(vector_to_json_array(v)))
             for v in latents[-1:]:
-                print("{}".format(vector_to_json_array(v)))
+                print("JSON#{}".format(vector_to_json_array(v)))
             done = True
 
     # for v in vectors[-1:]:
     #     print("{}".format(vector_to_json_array(v)))
 
-    print("]")
+    print("JSON#]")
     print("VECTOR OUTPUT END")
 
 if __name__ == "__main__":
@@ -277,6 +293,20 @@ if __name__ == "__main__":
                         help="where to save the generated samples")
     parser.add_argument('--flat', dest='flat', default=False, action='store_true')
     parser.add_argument('--analogy', dest='analogy', default=False, action='store_true')
+    parser.add_argument('--anchor-offset', dest='anchor_offset', default=None,
+                        help="use json file as source of offsets")
+    parser.add_argument('--anchor-offset-x-index', dest='anchor_offset_x_index', default=5, type=int,
+                        help="which index to use for x offset")
+    parser.add_argument('--anchor-offset-y-index', dest='anchor_offset_y_index', default=39, type=int,
+                        help="which index to use for y offset")
+    parser.add_argument('--anchor-offset-x-minscale', dest='anchor_offset_x_minscale', default=0, type=float,
+                        help="scaling factor for min x offset")
+    parser.add_argument('--anchor-offset-y-minscale', dest='anchor_offset_y_minscale', default=0, type=float,
+                        help="scaling factor for min y offset")
+    parser.add_argument('--anchor-offset-x-maxscale', dest='anchor_offset_x_maxscale', default=2.0, type=float,
+                        help="scaling factor for min x offset")
+    parser.add_argument('--anchor-offset-y-maxscale', dest='anchor_offset_y_maxscale', default=2.0, type=float,
+                        help="scaling factor for min y offset")
     parser.add_argument('--gradient', dest='gradient', default=False, action='store_true')
     parser.add_argument('--linear', dest='linear', default=False, action='store_true')
     parser.add_argument('--gaussian', dest='gaussian', default=False, action='store_true')
@@ -292,6 +322,8 @@ if __name__ == "__main__":
                         help="use reconstructed images instead of random ones")
     parser.add_argument('--anchor-image', dest='anchor_image', default=None,
                         help="use image as source of anchors")
+    parser.add_argument('--anchor-vectors', dest='anchor_vectors', default=None,
+                        help="use json file as source of anchors")
     parser.add_argument("--numanchors", type=int, default=150,
                         help="number of anchors to generate")
     parser.add_argument('--dataset', dest='dataset', default=None,
@@ -343,6 +375,8 @@ if __name__ == "__main__":
 
     if anchor_images is not None:
         anchors = get_image_vectors(model, anchor_images)
+    elif args.anchor_vectors is not None:
+        anchors = get_json_vectors(args.anchor_vectors)
     else:
         anchors = None
 
@@ -352,6 +386,12 @@ if __name__ == "__main__":
         else:
             stream_output_vectors(model, args.dataset, args.split)
         sys.exit(0)
+
+    if args.anchor_offset is not None:
+        # compute anchors as offsets from existing anchor
+        offsets = get_json_vectors(args.anchor_offset)
+        anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x_index, args.anchor_offset_y_index,
+            args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
 
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks

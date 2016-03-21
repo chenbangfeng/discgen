@@ -193,7 +193,7 @@ def compute_splash(rows, cols, dim, space, anchors, spherical, gaussian):
     for y in range(rows):
         for x in range(cols):
             if y%space == 0 and x%space == 0:
-                if anchors is not None:
+                if anchors is not None and cur_anchor < len(anchors):
                     u_list[y,x,:] = anchors[cur_anchor]
                     cur_anchor = cur_anchor + 1
                 else:
@@ -357,7 +357,7 @@ def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
             xmin_ymax = bl - (tr - tl)
             xmax_ymin = tr + (tl - bl)
             xmin_ymin = xmin_ymax + (xmax_ymin - xmax_ymax)
-    elif anchors != None:
+    elif anchors is not None:
         xmax_ymax = anchors[3]
     else:
         xmax_ymax = np.random.normal(0, 1, dim)
