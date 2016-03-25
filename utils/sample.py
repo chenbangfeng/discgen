@@ -49,7 +49,7 @@ def get_dataset_iterator(dataset, split, include_targets=False):
     it = train_stream.get_epoch_iterator()
     return it
 
-def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
+def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
     it = get_dataset_iterator(dataset, split, include_targets)
 
     anchors = []
@@ -57,6 +57,8 @@ def get_anchor_images(dataset, split, offset, numanchors, allowed, prohibited, c
         cur = it.next()
     while len(anchors) < numanchors:
         cur = it.next()
+        for s in range(stepsize-1):
+            it.next()
         candidate_passes = True
         if allowed:
             for p in allowed:
@@ -335,6 +337,8 @@ if __name__ == "__main__":
                         help="Which split to use from the dataset (train/nontrain/valid/test/any).")
     parser.add_argument("--offset", type=int, default=0,
                         help="data offset to skip")
+    parser.add_argument("--stepsize", type=int, default=1,
+                        help="data step size from offset")
     parser.add_argument("--allowed", dest='allowed', type=str, default=None,
                         help="Only allow whitelisted labels L1,L2,...")
     parser.add_argument("--prohibited", dest='prohibited', type=str, default=None,
@@ -359,7 +363,7 @@ if __name__ == "__main__":
             allowed = map(int, args.allowed.split(","))
         if(args.prohibited):
             prohibited = map(int, args.prohibited.split(","))
-        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.numanchors, allowed, prohibited, args.color_convert)
+        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.color_convert)
 
     if args.anchor_image is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_image)
