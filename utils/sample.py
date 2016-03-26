@@ -234,9 +234,32 @@ def output_vectors(vectors):
     print("JSON#]")
     print("VECTOR OUTPUT END")
 
-def anchors_from_offsets(anchor, offsets, x_index, y_index, x_minscale, y_minscale, x_maxscale, y_maxscale):
-    x_offset = offsets[x_index]
-    y_offset = offsets[y_index]
+def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minscale, y_minscale, x_maxscale, y_maxscale):
+    dim = len(anchor)
+    x_offset = np.zeros((dim,))
+    if x_indices_str[0] == ",":
+        x_indices_str = x_indices_str[1:]
+    x_indices = map(int, x_indices_str.split(","))
+    for x_index in x_indices:
+        if x_index < 0:
+            scaling = -1.0
+            x_index = -x_index
+        else:
+            scaling = 1.0
+        x_offset += scaling * offsets[x_index]
+
+    y_offset = np.zeros((dim,))
+    if y_indices_str[0] == ",":
+        y_indices_str = y_indices_str[1:]
+    y_indices = map(int, y_indices_str.split(","))
+    for y_index in y_indices:
+        if y_index < 0:
+            scaling = -1.0
+            y_index = -y_index
+        else:
+            scaling = 1.0
+        y_offset += scaling * offsets[y_index]
+
     newanchors = []
     newanchors.append(anchor + x_minscale * x_offset + y_minscale * y_offset)
     newanchors.append(anchor + x_minscale * x_offset + y_maxscale * y_offset)
@@ -297,10 +320,10 @@ if __name__ == "__main__":
     parser.add_argument('--analogy', dest='analogy', default=False, action='store_true')
     parser.add_argument('--anchor-offset', dest='anchor_offset', default=None,
                         help="use json file as source of offsets")
-    parser.add_argument('--anchor-offset-x-index', dest='anchor_offset_x_index', default=5, type=int,
-                        help="which index to use for x offset")
-    parser.add_argument('--anchor-offset-y-index', dest='anchor_offset_y_index', default=39, type=int,
-                        help="which index to use for y offset")
+    parser.add_argument('--anchor-offset-x', dest='anchor_offset_x', default="5", type=str,
+                        help="which indices to combine for x offset")
+    parser.add_argument('--anchor-offset-y', dest='anchor_offset_y', default="39", type=str,
+                        help="which indices to combine for y offset")
     parser.add_argument('--anchor-offset-x-minscale', dest='anchor_offset_x_minscale', default=0, type=float,
                         help="scaling factor for min x offset")
     parser.add_argument('--anchor-offset-y-minscale', dest='anchor_offset_y_minscale', default=0, type=float,
@@ -394,7 +417,7 @@ if __name__ == "__main__":
     if args.anchor_offset is not None:
         # compute anchors as offsets from existing anchor
         offsets = get_json_vectors(args.anchor_offset)
-        anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x_index, args.anchor_offset_y_index,
+        anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x, args.anchor_offset_y,
             args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
 
     selector = Selector(model.top_bricks)
