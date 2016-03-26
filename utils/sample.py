@@ -234,8 +234,7 @@ def output_vectors(vectors):
     print("JSON#]")
     print("VECTOR OUTPUT END")
 
-def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minscale, y_minscale, x_maxscale, y_maxscale):
-    dim = len(anchor)
+def offset_from_string(x_indices_str, dim):
     x_offset = np.zeros((dim,))
     if x_indices_str[0] == ",":
         x_indices_str = x_indices_str[1:]
@@ -247,18 +246,12 @@ def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minsca
         else:
             scaling = 1.0
         x_offset += scaling * offsets[x_index]
+    return x_offset
 
-    y_offset = np.zeros((dim,))
-    if y_indices_str[0] == ",":
-        y_indices_str = y_indices_str[1:]
-    y_indices = map(int, y_indices_str.split(","))
-    for y_index in y_indices:
-        if y_index < 0:
-            scaling = -1.0
-            y_index = -y_index
-        else:
-            scaling = 1.0
-        y_offset += scaling * offsets[y_index]
+def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minscale, y_minscale, x_maxscale, y_maxscale):
+    dim = len(anchor)
+    x_offset = offset_from_string(x_indices_str, dim)
+    y_offset = offset_from_string(y_indices_str, dim)
 
     newanchors = []
     newanchors.append(anchor + x_minscale * x_offset + y_minscale * y_offset)
@@ -266,6 +259,11 @@ def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minsca
     newanchors.append(anchor + x_maxscale * x_offset + y_minscale * y_offset)
     newanchors.append(anchor + x_maxscale * x_offset + y_maxscale * y_offset)
     return np.array(newanchors)
+
+def get_global_offset(offsets, indices_str, scale):
+    dim = len(offsets[0])
+    global_offset = offset_from_string(indices_str, dim)
+    return scale * global_offset
 
 def stream_output_vectors(model, dataset, split, color_convert=False):
     encoder_function = get_image_encoder_function(model)
@@ -318,8 +316,14 @@ if __name__ == "__main__":
                         help="where to save the generated samples")
     parser.add_argument('--flat', dest='flat', default=False, action='store_true')
     parser.add_argument('--analogy', dest='analogy', default=False, action='store_true')
+    parser.add_argument('--global-offset', dest='global_offset', default=None,
+                        help="use json file as source of global offsets")
+    parser.add_argument('--global-indices', dest='global_indices', default=None, type=str,
+                        help="offset indices to apply globally")
+    parser.add_argument('--global-scale', dest='global_scale', default=1.0, type=float,
+                        help="scaling factor for global offset")
     parser.add_argument('--anchor-offset', dest='anchor_offset', default=None,
-                        help="use json file as source of offsets")
+                        help="use json file as source of each anchors offsets")
     parser.add_argument('--anchor-offset-x', dest='anchor_offset_x', default="5", type=str,
                         help="which indices to combine for x offset")
     parser.add_argument('--anchor-offset-y', dest='anchor_offset_y', default="39", type=str,
@@ -414,11 +418,16 @@ if __name__ == "__main__":
             stream_output_vectors(model, args.dataset, args.split)
         sys.exit(0)
 
+    global_offset = None
     if args.anchor_offset is not None:
         # compute anchors as offsets from existing anchor
         offsets = get_json_vectors(args.anchor_offset)
         anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x, args.anchor_offset_y,
             args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
+
+    if args.global_offset is not None:
+        offsets = get_json_vectors(args.global_offset)
+        global_offset =  get_global_offset(offsets, args.global_indices, args.global_scale)
 
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
@@ -438,6 +447,9 @@ if __name__ == "__main__":
             anchors = rand_anchors
     z = generate_latent_grid(z_dim, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
             anchors, anchor_images, args.splash, args.spacing, args.analogy)
+    if global_offset is not None:
+        z = z + global_offset
+
     grid_from_latents(z, model, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
     # reconstruct_grid(model, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
     #     anchors, anchor_images, args.splash, args.spacing, args.analogy, args.tight, args.shoulders, args.save_path)
