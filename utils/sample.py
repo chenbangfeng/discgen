@@ -353,6 +353,9 @@ if __name__ == "__main__":
                         help="use image as source of anchors")
     parser.add_argument('--anchor-vectors', dest='anchor_vectors', default=None,
                         help="use json file as source of anchors")
+    parser.add_argument('--invert-anchors', dest='invert_anchors',
+                        default=False, action='store_true',
+                        help="Use antipode of given anchors.")
     parser.add_argument("--numanchors", type=int, default=150,
                         help="number of anchors to generate")
     parser.add_argument('--dataset', dest='dataset', default=None,
@@ -394,6 +397,8 @@ if __name__ == "__main__":
 
     if args.anchor_image is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_image)
+        if args.offset > 0:
+            anchor_images = anchor_images[args.offset:]
 
     if args.passthrough:
         print('Preparing image grid...')
@@ -410,6 +415,9 @@ if __name__ == "__main__":
         anchors = get_json_vectors(args.anchor_vectors)
     else:
         anchors = None
+
+    if args.invert_anchors:
+        anchors = -1 * anchors
 
     if args.encoder:
         if anchors is not None:
