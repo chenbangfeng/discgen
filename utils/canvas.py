@@ -57,6 +57,8 @@ def alpha_composite(src, src_mask, dst):
     np.clip(out,0,1.0)
     return out
 
+gsize = 64
+
 class Canvas:
     """Simple Canvas Thingy"""
 
@@ -98,11 +100,18 @@ class Canvas:
         cx, cy = self.map_to_canvas(x, y)
         self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)] = square
 
+    def check_bounds(self, cx, cy):
+        border = gsize / 2
+        if (cx < self.canvas_xmin + border) or (cy < self.canvas_ymin + border) or (cx >= self.canvas_xmax - border) or (cy >= self.canvas_ymax - border):
+            return False
+        return True
+
     def place_image(self, im, x, y):
         square = im
         cx, cy = self.map_to_canvas(x, y)
-        self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)] = \
-            alpha_composite(im, self.mask, self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)])
+        if self.check_bounds(cx, cy):
+            self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)] = \
+                alpha_composite(im, self.mask, self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)])
 
     def save(self, save_path):
         out = np.dstack(self.pixels)
@@ -114,9 +123,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model", dest='model', type=str, default=None,
                         help="path to the saved model")
-    parser.add_argument("--width", type=int, default=256,
+    parser.add_argument("--width", type=int, default=512,
                         help="width of canvas to render in pixels")
-    parser.add_argument("--height", type=int, default=256,
+    parser.add_argument("--height", type=int, default=512,
                         help="height of canvas to render in pixels")
     parser.add_argument("--xmin", type=int, default=0,
                         help="min x in virtual space")
@@ -132,6 +141,8 @@ if __name__ == "__main__":
                 default=None, help="Optional random seed")
     parser.add_argument('--anchor-image', dest='anchor_image', default=None,
                         help="use image as source of anchors")
+    parser.add_argument('--layout', dest='layout', default=None,
+                        help="layout json file")
     args = parser.parse_args()
 
     if args.seed:
@@ -143,7 +154,17 @@ if __name__ == "__main__":
         _, _, anchor_images = anchors_from_image(args.anchor_image)
 
     canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax)
-    canvas.place_image(anchor_images[0], 35, 35)
-    canvas.place_image(anchor_images[1], 50, 50)
-    canvas.place_image(anchor_images[2], 65, 65)
+
+    if args.layout:
+        with open(args.layout) as json_file:
+            layout_data = json.load(json_file)
+        xy = np.array(layout_data["xy"])
+        roots = layout_data["r"]
+        for i, pair in enumerate(xy):
+            x = pair[0] * canvas.xmax
+            y = pair[1] * canvas.ymax
+            r = roots[i]
+            canvas.place_image(anchor_images[r], x, y)
+    # canvas.place_image(anchor_images[1], 50, 50)
+    # canvas.place_image(anchor_images[2], 95, 95)
     canvas.save(args.save_path)
