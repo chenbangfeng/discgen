@@ -28,6 +28,8 @@ from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
 
+g_image_size = 128
+
 def get_dataset_iterator(dataset, split, include_targets=False):
     sources = ('features', 'targets') if include_targets else ('features',)
     if split == "all":
@@ -71,7 +73,7 @@ def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, pro
 
         if candidate_passes:
             if color_convert:
-                anchors.append(np.tile(cur[0].reshape(1, 64, 64), (3, 1, 1)))
+                anchors.append(np.tile(cur[0].reshape(1, g_image_size, g_image_size), (3, 1, 1)))
             else:
                 anchors.append(cur[0])
 
@@ -186,7 +188,7 @@ def surround_anchors(rows, cols, anchors, rand_anchors):
                 cur_anc = cur_anc + 1
     return newanchors
 
-def anchors_from_image(fname, channels=3, image_size=(64,64)):
+def anchors_from_image(fname, channels=3, image_size=(g_image_size,g_image_size)):
     rawim = imread(fname);
     if(channels == 1):
         im_height, im_width = rawim.shape
@@ -281,7 +283,7 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
             for i in range(batch_size):
                 cur = it.next()
                 if color_convert:
-                    anchors.append(np.tile(cur[0].reshape(1, 64, 64), (3, 1, 1)))
+                    anchors.append(np.tile(cur[0].reshape(1, g_image_size, g_image_size), (3, 1, 1)))
                 else:
                     anchors.append(cur[0])
             anchors_input = np.array(anchors)

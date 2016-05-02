@@ -23,6 +23,7 @@ from theano import tensor
 
 from discgen.utils import create_custom_streams
 
+g_image_size = 128
 
 def create_model_bricks():
     convnet = ConvolutionalSequence(
@@ -68,7 +69,7 @@ def create_model_bricks():
             Rectifier(),
         ],
         num_channels=3,
-        image_size=(64, 64),
+        image_size=(g_image_size, g_image_size),
         use_bias=False,
         weights_init=IsotropicGaussian(0.033),
         biases_init=Constant(0),

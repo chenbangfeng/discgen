@@ -28,6 +28,8 @@ from theano import tensor
 from discgen.utils import create_celeba_streams, create_custom_streams
 from utils.samplecheckpoint import SampleCheckpoint
 
+g_image_size = 128
+
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
         layers=[
@@ -117,7 +119,7 @@ def create_model_bricks(z_dim):
             Rectifier(),
         ],
         num_channels=3,
-        image_size=(64, 64),
+        image_size=(g_image_size, g_image_size),
         use_bias=False,
         weights_init=IsotropicGaussian(0.033),
         biases_init=Constant(0),
@@ -229,7 +231,7 @@ def create_model_bricks(z_dim):
             ConvolutionalTranspose(
                 filter_size=(2, 2),
                 step=(2, 2),
-                original_image_size=(64, 64),
+                original_image_size=(g_image_size, g_image_size),
                 num_filters=32,
                 name='conv12'),
             SpatialBatchNormalization(name='batch_norm12'),
@@ -267,7 +269,7 @@ def create_training_computation_graphs(z_dim, discriminative_regularization,
 
     # Initialize conditional variances
     log_sigma_theta = shared_floatx(
-        numpy.zeros((3, 64, 64)), name='log_sigma_theta')
+        numpy.zeros((3, g_image_size, g_image_size)), name='log_sigma_theta')
     add_role(log_sigma_theta, PARAMETER)
     variance_parameters = [log_sigma_theta]
     if discriminative_regularization:
@@ -429,7 +431,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     # TODO: why does z_dim=foo become foo/2?
     extensions = [Timing(), FinishAfter(after_n_epochs=75), checkpoint, 
                   train_monitoring, valid_monitoring, 
-                  SampleCheckpoint(z_dim=z_dim/2, image_size=(64, 64), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
+                  # SampleCheckpoint(z_dim=z_dim/2, image_size=(g_image_size, g_image_size), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
                   Printing(), ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
