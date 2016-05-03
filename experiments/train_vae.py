@@ -29,6 +29,9 @@ from discgen.utils import create_celeba_streams, create_custom_streams
 from utils.samplecheckpoint import SampleCheckpoint
 
 g_image_size = 128
+g_image_size2 = 64
+g_image_size3 = 32
+g_image_size4 = 16
 
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
@@ -165,7 +168,7 @@ def create_model_bricks(z_dim):
             ConvolutionalTranspose(
                 filter_size=(2, 2),
                 step=(2, 2),
-                original_image_size=(8, 8),
+                original_image_size=(g_image_size4, g_image_size4),
                 num_filters=256,
                 name='conv3'),
             SpatialBatchNormalization(name='batch_norm3'),
@@ -187,7 +190,7 @@ def create_model_bricks(z_dim):
             ConvolutionalTranspose(
                 filter_size=(2, 2),
                 step=(2, 2),
-                original_image_size=(16, 16),
+                original_image_size=(g_image_size3, g_image_size3),
                 num_filters=128,
                 name='conv6'),
             SpatialBatchNormalization(name='batch_norm6'),
@@ -209,7 +212,7 @@ def create_model_bricks(z_dim):
             ConvolutionalTranspose(
                 filter_size=(2, 2),
                 step=(2, 2),
-                original_image_size=(32, 32),
+                original_image_size=(g_image_size2, g_image_size2),
                 num_filters=64,
                 name='conv9'),
             SpatialBatchNormalization(name='batch_norm9'),
@@ -431,7 +434,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     # TODO: why does z_dim=foo become foo/2?
     extensions = [Timing(), FinishAfter(after_n_epochs=75), checkpoint, 
                   train_monitoring, valid_monitoring, 
-                  # SampleCheckpoint(z_dim=z_dim/2, image_size=(g_image_size, g_image_size), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
+                  SampleCheckpoint(z_dim=z_dim/2, image_size=(g_image_size, g_image_size), channels=3, save_subdir=subdir, before_training=True, after_epoch=True),
                   Printing(), ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
