@@ -20,7 +20,7 @@ import json
 from scipy.misc import imread, imsave
 
 from discgen.utils import plot_image_grid
-from sample_utils import anchors_from_image
+from sample_utils import anchors_from_image, get_image_vectors
 
 from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
@@ -119,6 +119,27 @@ class Canvas:
         img = Image.fromarray(out)
         img.save(save_path)
 
+def images_from_latents(z, model):
+    selector = Selector(model.top_bricks)
+    decoder_mlp, = selector.select('/decoder_mlp').bricks
+    decoder_convnet, = selector.select('/decoder_convnet').bricks
+
+    print('Building computation graph...')
+    sz = shared_floatx(z)
+    mu_theta = decoder_convnet.apply(
+        decoder_mlp.apply(sz).reshape(
+            (-1,) + decoder_convnet.get_dim('input_')))
+    computation_graph = ComputationGraph([mu_theta])
+
+    print('Compiling sampling function...')
+    sampling_function = theano.function(
+        computation_graph.inputs, computation_graph.outputs[0])
+
+    print('Sampling...')
+    samples = sampling_function()
+
+    return samples
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model", dest='model', type=str, default=None,
@@ -143,6 +164,10 @@ if __name__ == "__main__":
                         help="use image as source of anchors")
     parser.add_argument('--layout', dest='layout', default=None,
                         help="layout json file")
+    parser.add_argument('--batch-size', dest='batch_size', type=int, default=100,
+                        help="number of images to decode at once")
+    parser.add_argument('--passthrough', dest='passthrough', default=False, action='store_true',
+                        help="Use originals instead of reconstructions")
     args = parser.parse_args()
 
     if args.seed:
@@ -153,7 +178,18 @@ if __name__ == "__main__":
     if args.anchor_image is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_image)
 
+    if not args.passthrough:
+        print('Loading saved model...')
+        model = Model(load(args.model).algorithm.cost)
+
+        if anchor_images is not None:
+            # anchors = anchor_images
+            anchors = get_image_vectors(model, anchor_images)
+
+    encodes = {}
+
     canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax)
+    workq = []
 
     if args.layout:
         with open(args.layout) as json_file:
@@ -164,7 +200,25 @@ if __name__ == "__main__":
             x = pair[0] * canvas.xmax
             y = pair[1] * canvas.ymax
             r = roots[i]
-            canvas.place_image(anchor_images[r], x, y)
+            if args.passthrough:
+                output_image = anchor_images[r]
+                canvas.place_image(output_image, x, y)
+            else:
+                workq.append({
+                        "z": anchors[r],
+                        "x": x,
+                        "y": y
+                    })
+
+    while(len(workq) > 0):
+        curq = workq[:args.batch_size]
+        workq = workq[args.batch_size:]
+        latents = [e["z"] for e in curq]
+        images = images_from_latents(latents, model)
+        # images = latents
+        for i in range(len(curq)):
+            canvas.place_image(images[i], curq[i]["x"], curq[i]["y"])
+
     # canvas.place_image(anchor_images[1], 50, 50)
     # canvas.place_image(anchor_images[2], 95, 95)
     canvas.save(args.save_path)

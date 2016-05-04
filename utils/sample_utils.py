@@ -58,3 +58,29 @@ def anchors_from_image(fname, channels=3, image_size=(64,64)):
 
     return steps_y, steps_x, datastream_images
 
+def get_image_encoder_function(model):
+    selector = Selector(model.top_bricks)
+    encoder_convnet, = selector.select('/encoder_convnet').bricks
+    encoder_mlp, = selector.select('/encoder_mlp').bricks
+
+    print('Building computation graph...')
+    x = tensor.tensor4('features')
+    phi = encoder_mlp.apply(encoder_convnet.apply(x).flatten(ndim=2))
+    nlat = encoder_mlp.output_dim // 2
+    mu_phi = phi[:, :nlat]
+    log_sigma_phi = phi[:, nlat:]
+    epsilon = Random().theano_rng.normal(size=mu_phi.shape, dtype=mu_phi.dtype)
+    z = mu_phi + epsilon * tensor.exp(log_sigma_phi)
+    computation_graph = ComputationGraph([x, z])
+
+    print('Compiling reconstruction function...')
+    encoder_function = theano.function(
+        computation_graph.inputs, computation_graph.outputs)
+    return encoder_function
+
+def get_image_vectors(model, images):
+    encoder_function = get_image_encoder_function(model)
+    print('Encoding...')
+    examples, latents = encoder_function(images)
+    return latents
+
