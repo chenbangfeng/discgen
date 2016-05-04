@@ -381,6 +381,8 @@ if __name__ == "__main__":
                         help="Append anchors to left/right columns")
     parser.add_argument('--encoder', dest='encoder', default=False, action='store_true',
                         help="Ouput dataset as encoded vectors")
+    parser.add_argument("--image-size", dest='image_size', type=int, default=64,
+                        help="size of (offset) images")
     args = parser.parse_args()
 
     if args.seed:
@@ -398,7 +400,7 @@ if __name__ == "__main__":
         anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.color_convert)
 
     if args.anchor_image is not None:
-        _, _, anchor_images = anchors_from_image(args.anchor_image)
+        _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(args.image_size, args.image_size))
         if args.offset > 0:
             anchor_images = anchor_images[args.offset:]
 
