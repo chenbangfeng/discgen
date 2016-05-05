@@ -84,3 +84,22 @@ def get_image_vectors(model, images):
     examples, latents = encoder_function(images)
     return latents
 
+def get_json_vectors(filename):
+    with open(filename) as json_file:
+        json_data = json.load(json_file)
+    return np.array(json_data)
+
+def offset_from_string(x_indices_str, offsets, dim):
+    x_offset = np.zeros((dim,))
+    if x_indices_str[0] == ",":
+        x_indices_str = x_indices_str[1:]
+    x_indices = map(int, x_indices_str.split(","))
+    for x_index in x_indices:
+        if x_index < 0:
+            scaling = -1.0
+            x_index = -x_index
+        else:
+            scaling = 1.0
+        x_offset += scaling * offsets[x_index]
+    return x_offset
+

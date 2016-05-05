@@ -20,7 +20,7 @@ import json
 from scipy.misc import imread, imsave
 
 from discgen.utils import plot_image_grid
-from sample_utils import anchors_from_image, get_image_encoder_function, get_image_vectors
+from sample_utils import anchors_from_image, get_image_encoder_function, get_image_vectors, get_json_vectors, offset_from_string
 
 from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
@@ -163,11 +163,6 @@ def surround_anchors(rows, cols, anchors, rand_anchors):
                 cur_anc = cur_anc + 1
     return newanchors
 
-def get_json_vectors(filename):
-    with open(filename) as json_file:
-        json_data = json.load(json_file)
-    return np.array(json_data)
-
 def vector_to_json_array(v):
     return json.dumps(v.tolist())
 
@@ -181,24 +176,10 @@ def output_vectors(vectors):
     print("JSON#]")
     print("VECTOR OUTPUT END")
 
-def offset_from_string(x_indices_str, dim):
-    x_offset = np.zeros((dim,))
-    if x_indices_str[0] == ",":
-        x_indices_str = x_indices_str[1:]
-    x_indices = map(int, x_indices_str.split(","))
-    for x_index in x_indices:
-        if x_index < 0:
-            scaling = -1.0
-            x_index = -x_index
-        else:
-            scaling = 1.0
-        x_offset += scaling * offsets[x_index]
-    return x_offset
-
 def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minscale, y_minscale, x_maxscale, y_maxscale):
     dim = len(anchor)
-    x_offset = offset_from_string(x_indices_str, dim)
-    y_offset = offset_from_string(y_indices_str, dim)
+    x_offset = offset_from_string(x_indices_str, offsets, dim)
+    y_offset = offset_from_string(y_indices_str, offsets, dim)
 
     newanchors = []
     newanchors.append(anchor + x_minscale * x_offset + y_minscale * y_offset)

@@ -20,7 +20,7 @@ import json
 from scipy.misc import imread, imsave
 
 from discgen.utils import plot_image_grid
-from sample_utils import anchors_from_image, get_image_vectors
+from sample_utils import anchors_from_image, get_image_vectors, get_json_vectors, offset_from_string
 
 from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
@@ -140,6 +140,13 @@ def images_from_latents(z, model):
 
     return samples
 
+def apply_anchor_offsets(anchor, offsets, a, a_indices_str):
+    dim = len(anchor)
+    a_offset = offset_from_string(a_indices_str, offsets, dim)
+    new_anchor = anchor + a * a_offset
+    # print(a, a*a_offset)
+    return new_anchor
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model", dest='model', type=str, default=None,
@@ -168,6 +175,10 @@ if __name__ == "__main__":
                         help="number of images to decode at once")
     parser.add_argument('--passthrough', dest='passthrough', default=False, action='store_true',
                         help="Use originals instead of reconstructions")
+    parser.add_argument('--anchor-offset', dest='anchor_offset', default=None,
+                        help="use json file as source of each anchors offsets")
+    parser.add_argument('--anchor-offset-a', dest='anchor_offset_a', default="5", type=str,
+                        help="which indices to combine for offset a")
     args = parser.parse_args()
 
     if args.seed:
@@ -186,6 +197,11 @@ if __name__ == "__main__":
             # anchors = anchor_images
             anchors = get_image_vectors(model, anchor_images)
 
+    anchor_offsets = None
+    if args.anchor_offset is not None:
+        # compute anchors as offsets from existing anchor
+        anchor_offsets = get_json_vectors(args.anchor_offset)
+
     encodes = {}
 
     canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax)
@@ -199,13 +215,19 @@ if __name__ == "__main__":
         for i, pair in enumerate(xy):
             x = pair[0] * canvas.xmax
             y = pair[1] * canvas.ymax
+            a = pair[1]
+            b = pair[0]
             r = roots[i]
             if args.passthrough:
                 output_image = anchor_images[r]
                 canvas.place_image(output_image, x, y)
             else:
+                if anchor_offsets is not None:
+                    z = apply_anchor_offsets(anchors[r], anchor_offsets, a, args.anchor_offset_a)
+                else:
+                    z = anchors[r]
                 workq.append({
-                        "z": anchors[r],
+                        "z": z,
                         "x": x,
                         "y": y
                     })
