@@ -57,7 +57,8 @@ def alpha_composite(src, src_mask, dst):
     np.clip(out,0,1.0)
     return out
 
-gsize = 64
+gsize = 128
+gsize2 = gsize/2
 
 class Canvas:
     """Simple Canvas Thingy"""
@@ -80,7 +81,7 @@ class Canvas:
         self.xspread_ratio = float(self.canvas_xspread) / self.xspread
         self.yspread_ratio = float(self.canvas_yspread) / self.yspread
 
-        _, _, mask_images = anchors_from_image("mask/rounded_mask64.png")
+        _, _, mask_images = anchors_from_image("mask/rounded_mask{}.png".format(gsize), image_size=(gsize, gsize))
         self.mask = mask_images[0][0]
 
     # To map
@@ -95,13 +96,13 @@ class Canvas:
         return new_x, new_y
 
     def place_square(self, x, y):
-        square = np.zeros((channels, 64, 64))
+        square = np.zeros((channels, gsize, gsize))
         square.fill(1)
         cx, cy = self.map_to_canvas(x, y)
-        self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)] = square
+        self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = square
 
     def check_bounds(self, cx, cy):
-        border = gsize / 2
+        border = gsize2
         if (cx < self.canvas_xmin + border) or (cy < self.canvas_ymin + border) or (cx >= self.canvas_xmax - border) or (cy >= self.canvas_ymax - border):
             return False
         return True
@@ -110,8 +111,8 @@ class Canvas:
         square = im
         cx, cy = self.map_to_canvas(x, y)
         if self.check_bounds(cx, cy):
-            self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)] = \
-                alpha_composite(im, self.mask, self.pixels[:, (cy-32):(cy+32), (cx-32):(cx+32)])
+            self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
+                alpha_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
 
     def save(self, save_path):
         out = np.dstack(self.pixels)
@@ -187,7 +188,7 @@ if __name__ == "__main__":
 
     anchor_images = None
     if args.anchor_image is not None:
-        _, _, anchor_images = anchors_from_image(args.anchor_image)
+        _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(gsize, gsize))
 
     if not args.passthrough:
         print('Loading saved model...')
