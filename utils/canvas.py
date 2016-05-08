@@ -12,7 +12,7 @@ from blocks.serialization import load
 from blocks.utils import shared_floatx
 from blocks.config import config
 from theano import tensor
-from utils.modelutil import make_flat, compute_gradient, compute_splash, img_grid
+from utils.modelutil import make_flat, compute_gradient, compute_splash, img_grid, compute_splash_latent
 import numpy as np
 import random
 import sys
@@ -171,6 +171,8 @@ if __name__ == "__main__":
                 default=None, help="Optional random seed")
     parser.add_argument('--anchor-image', dest='anchor_image', default=None,
                         help="use image as source of anchors")
+    parser.add_argument('--anchor-splash', dest='anchor_splash', default=None,
+                        help="use image as single source of splash coordinates")
     parser.add_argument('--layout', dest='layout', default=None,
                         help="layout json file")
     parser.add_argument('--batch-size', dest='batch_size', type=int, default=100,
@@ -192,6 +194,8 @@ if __name__ == "__main__":
     anchor_images = None
     if args.anchor_image is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(gsize, gsize))
+    elif args.anchor_splash is not None:
+        _, _, anchor_images = anchors_from_image(args.anchor_splash, image_size=(gsize, gsize))
 
     if not args.passthrough:
         print('Loading saved model...')
@@ -205,8 +209,6 @@ if __name__ == "__main__":
     if args.anchor_offset is not None:
         # compute anchors as offsets from existing anchor
         anchor_offsets = get_json_vectors(args.anchor_offset)
-
-    encodes = {}
 
     canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax)
     workq = []
@@ -226,7 +228,9 @@ if __name__ == "__main__":
                 output_image = anchor_images[r]
                 canvas.place_image(output_image, x, y)
             else:
-                if anchor_offsets is not None:
+                if args.anchor_splash is not None:
+                    z = compute_splash_latent(3, 3, b, a, anchors)
+                elif anchor_offsets is not None:
                     z = apply_anchor_offsets(anchors[r], anchor_offsets, a, b, args.anchor_offset_a, args.anchor_offset_b)
                 else:
                     z = anchors[r]
