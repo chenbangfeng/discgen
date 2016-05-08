@@ -141,10 +141,11 @@ def images_from_latents(z, model):
 
     return samples
 
-def apply_anchor_offsets(anchor, offsets, a, a_indices_str):
+def apply_anchor_offsets(anchor, offsets, a, b, a_indices_str, b_indices_str):
     dim = len(anchor)
     a_offset = offset_from_string(a_indices_str, offsets, dim)
-    new_anchor = anchor + a * a_offset
+    b_offset = offset_from_string(b_indices_str, offsets, dim)
+    new_anchor = anchor + a * a_offset + b * b_offset
     # print(a, a*a_offset)
     return new_anchor
 
@@ -178,8 +179,10 @@ if __name__ == "__main__":
                         help="Use originals instead of reconstructions")
     parser.add_argument('--anchor-offset', dest='anchor_offset', default=None,
                         help="use json file as source of each anchors offsets")
-    parser.add_argument('--anchor-offset-a', dest='anchor_offset_a', default="5", type=str,
+    parser.add_argument('--anchor-offset-a', dest='anchor_offset_a', default="42", type=str,
                         help="which indices to combine for offset a")
+    parser.add_argument('--anchor-offset-b', dest='anchor_offset_b', default="31", type=str,
+                        help="which indices to combine for offset b")
     args = parser.parse_args()
 
     if args.seed:
@@ -216,15 +219,15 @@ if __name__ == "__main__":
         for i, pair in enumerate(xy):
             x = pair[0] * canvas.xmax
             y = pair[1] * canvas.ymax
-            a = pair[1]
-            b = pair[0]
+            a = pair[0]
+            b = pair[1]
             r = roots[i]
             if args.passthrough:
                 output_image = anchor_images[r]
                 canvas.place_image(output_image, x, y)
             else:
                 if anchor_offsets is not None:
-                    z = apply_anchor_offsets(anchors[r], anchor_offsets, a, args.anchor_offset_a)
+                    z = apply_anchor_offsets(anchors[r], anchor_offsets, a, b, args.anchor_offset_a, args.anchor_offset_b)
                 else:
                     z = anchors[r]
                 workq.append({
