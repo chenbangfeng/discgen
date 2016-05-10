@@ -81,7 +81,9 @@ class Canvas:
         self.xspread_ratio = float(self.canvas_xspread) / self.xspread
         self.yspread_ratio = float(self.canvas_yspread) / self.yspread
 
-        _, _, mask_images = anchors_from_image("mask/rounded_mask{}.png".format(gsize), image_size=(gsize, gsize))
+        # _, _, mask_images = anchors_from_image("mask/full_mask{}.png".format(gsize), image_size=(gsize, gsize))
+        # _, _, mask_images = anchors_from_image("mask/rounded_mask{}.png".format(gsize), image_size=(gsize, gsize))
+        _, _, mask_images = anchors_from_image("mask/hexagons/hex1_{}_blur.png".format(gsize), image_size=(gsize, gsize))
         self.mask = mask_images[0][0]
 
     # To map
@@ -172,7 +174,9 @@ if __name__ == "__main__":
     parser.add_argument('--anchor-image', dest='anchor_image', default=None,
                         help="use image as source of anchors")
     parser.add_argument('--anchor-splash', dest='anchor_splash', default=None,
-                        help="use image as single source of splash coordinates")
+                        help="use image as single source of splash coordinates")    
+    parser.add_argument('--mask-layout', dest='mask_layout', default=None,
+                        help="use image as source of splash grid points")    
     parser.add_argument('--layout', dest='layout', default=None,
                         help="layout json file")
     parser.add_argument('--batch-size', dest='batch_size', type=int, default=100,
@@ -213,6 +217,8 @@ if __name__ == "__main__":
     canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax)
     workq = []
 
+    do_hex = True
+
     if args.layout:
         with open(args.layout) as json_file:
             layout_data = json.load(json_file)
@@ -239,6 +245,36 @@ if __name__ == "__main__":
                         "x": x,
                         "y": y
                     })
+
+    elif args.mask_layout:
+        rawim = imread(args.mask_layout);
+        if len(rawim.shape) == 2:
+            im_height, im_width = rawim.shape
+            mask_layout = rawim
+        else:
+            im_height, im_width, _ = rawim.shape
+            mask_layout = rawim[:,:,0]
+        for xpos in range(im_width):
+            for ypos in range(im_height):
+                a = float(xpos) / (im_width - 1)
+                if do_hex and ypos % 2 == 0:
+                    a = a + 0.5 / (im_width - 1)
+                x = canvas.xmax * a
+                b = float(ypos) / (im_height - 1)
+                y = canvas.ymax * b
+                if not mask_layout[ypos][xpos] > 128:
+                    pass
+                elif args.passthrough:
+                    output_image = anchor_images[0]
+                    canvas.place_image(output_image, x, y)
+                else:
+                    # z = compute_splash_latent(10, 10, b, a, anchors)
+                    z = compute_splash_latent(3, 3, b, a, anchors)
+                    workq.append({
+                            "z": z,
+                            "x": x,
+                            "y": y
+                        })
 
     while(len(workq) > 0):
         curq = workq[:args.batch_size]
