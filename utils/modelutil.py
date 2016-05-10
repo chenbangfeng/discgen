@@ -270,7 +270,16 @@ def compute_splash_latent(rows, cols, y, x, anchors, spherical=True, gaussian=Fa
     h2 = lerpv(fracX, u_list[nextY, intX, :], u_list[nextY, nextX, :])
 
     # interpolate vertically
-    return lerpv(fracY, h1, h2)
+    result = lerpv(fracY, h1, h2)
+    if np.isnan(result[0]):
+        print("NAN FOUND")
+        print("h1: ", h1)
+        print("h2: ", h2)
+        print("fracx,y", fracX, fracY)
+        print("xvars", spaceX, scaledX, intX, nextX, fracX)
+        print("yvars", spaceY, scaledY, intY, nextY, fracY)
+        print("inputs", x, y, rows, cols)
+    return result
 
 def compute_splash_old2(rows, cols, dim, space):
     u_list = np.zeros((cols, rows, dim))
@@ -361,6 +370,10 @@ def lerp_circle_gaussian(val, low, high):
 
 # http://stackoverflow.com/a/2880012/1010653
 def slerp(val, low, high):
+    if val <= 0:
+        return low
+    elif val >= 1:
+        return high
     omega = np.arccos(np.dot(low/np.linalg.norm(low), high/np.linalg.norm(high)))
     so = np.sin(omega)
     return np.sin((1.0-val)*omega) / so * low + np.sin(val*omega)/so * high
