@@ -75,8 +75,11 @@ gsize2 = gsize/2
 class Canvas:
     """Simple Canvas Thingy"""
 
-    def __init__(self, width, height, xmin, xmax, ymin, ymax):
+    def __init__(self, width, height, xmin, xmax, ymin, ymax, mask_name, init_black=False):
         self.pixels = np.zeros((channels, height, width))
+        if init_black:
+            alpha_channel = np.index_exp[3:, :, :]
+            self.pixels[alpha_channel] = 1.0
         self.canvas_xmin = 0
         self.canvas_xmax = width
         self.canvas_ymin = 0
@@ -93,7 +96,7 @@ class Canvas:
         self.xspread_ratio = float(self.canvas_xspread) / self.xspread
         self.yspread_ratio = float(self.canvas_yspread) / self.yspread
 
-        _, _, mask_images = anchors_from_image("mask/full_mask{}.png".format(gsize), image_size=(gsize, gsize))
+        _, _, mask_images = anchors_from_image("mask/{}_mask{}.png".format(mask_name, gsize), image_size=(gsize, gsize))
         # _, _, mask_images = anchors_from_image("mask/rounded_mask{}.png".format(gsize), image_size=(gsize, gsize))
         # _, _, mask_images = anchors_from_image("mask/hexagons/hex1_{}_blur.png".format(gsize), image_size=(gsize, gsize))
         self.mask = mask_images[0][0]
@@ -121,12 +124,16 @@ class Canvas:
             return False
         return True
 
-    def place_image(self, im, x, y):
+    def place_image(self, im, x, y, additive=False):
         square = im
         cx, cy = self.map_to_canvas(x, y)
         if self.check_bounds(cx, cy):
-            self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
-                additive_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
+            if additive:
+                self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
+                    additive_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
+            else:
+                self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
+                    alpha_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
 
     def save(self, save_path):
         out = np.dstack(self.pixels)
@@ -193,6 +200,10 @@ if __name__ == "__main__":
                         help="use image as single source of splash coordinates")    
     parser.add_argument('--random-splash', dest='random_splash', default=False, action='store_true',
                         help="use random sampling as source of splash coordinates")
+    parser.add_argument('--additive', dest='additive', default=False, action='store_true',
+                        help="use additive compositing")
+    parser.add_argument('--mask-name', dest='mask_name', default="rounded",
+                        help="prefix name for alpha mask to use (full/rounded/hex")
     parser.add_argument('--mask-layout', dest='mask_layout', default=None,
                         help="use image as source of splash grid points")    
     parser.add_argument('--layout', dest='layout', default=None,
@@ -236,7 +247,7 @@ if __name__ == "__main__":
         # compute anchors as offsets from existing anchor
         anchor_offsets = get_json_vectors(args.anchor_offset)
 
-    canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax)
+    canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax, args.mask_name)
     workq = []
 
     do_hex = True
@@ -254,7 +265,7 @@ if __name__ == "__main__":
             r = roots[i]
             if args.passthrough:
                 output_image = anchor_images[r]
-                canvas.place_image(output_image, x, y)
+                canvas.place_image(output_image, x, y, args.additive)
             else:
                 if args.anchor_splash is not None or args.random_splash:
                     z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
@@ -288,7 +299,7 @@ if __name__ == "__main__":
                     pass
                 elif args.passthrough:
                     output_image = anchor_images[0]
-                    canvas.place_image(output_image, x, y)
+                    canvas.place_image(output_image, x, y, args.additive)
                 else:
                     z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
                     workq.append({
@@ -304,7 +315,7 @@ if __name__ == "__main__":
         images = images_from_latents(latents, model)
         # images = latents
         for i in range(len(curq)):
-            canvas.place_image(images[i], curq[i]["x"], curq[i]["y"])
+            canvas.place_image(images[i], curq[i]["x"], curq[i]["y"], args.additive)
 
     # canvas.place_image(anchor_images[1], 50, 50)
     # canvas.place_image(anchor_images[2], 95, 95)
