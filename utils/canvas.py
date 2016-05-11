@@ -57,7 +57,19 @@ def alpha_composite(src, src_mask, dst):
     np.clip(out,0,1.0)
     return out
 
-gsize = 128
+def additive_composite(src, src_mask, dst):
+    '''
+    Return the additive composite of src and dst.
+    '''
+    out = np.empty(dst.shape, dtype = 'float')
+    alpha = np.index_exp[3:, :, :]
+    rgb = np.index_exp[:3, :, :]
+    out[alpha] = np.maximum(src_mask,dst[alpha])
+    out[rgb] = np.maximum(src[rgb],dst[rgb])
+    np.clip(out,0,1.0)
+    return out
+
+gsize = 64
 gsize2 = gsize/2
 
 class Canvas:
@@ -81,9 +93,9 @@ class Canvas:
         self.xspread_ratio = float(self.canvas_xspread) / self.xspread
         self.yspread_ratio = float(self.canvas_yspread) / self.yspread
 
-        # _, _, mask_images = anchors_from_image("mask/full_mask{}.png".format(gsize), image_size=(gsize, gsize))
+        _, _, mask_images = anchors_from_image("mask/full_mask{}.png".format(gsize), image_size=(gsize, gsize))
         # _, _, mask_images = anchors_from_image("mask/rounded_mask{}.png".format(gsize), image_size=(gsize, gsize))
-        _, _, mask_images = anchors_from_image("mask/hexagons/hex1_{}_blur.png".format(gsize), image_size=(gsize, gsize))
+        # _, _, mask_images = anchors_from_image("mask/hexagons/hex1_{}_blur.png".format(gsize), image_size=(gsize, gsize))
         self.mask = mask_images[0][0]
 
     # To map
@@ -114,7 +126,7 @@ class Canvas:
         cx, cy = self.map_to_canvas(x, y)
         if self.check_bounds(cx, cy):
             self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
-                alpha_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
+                additive_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
 
     def save(self, save_path):
         out = np.dstack(self.pixels)
@@ -159,6 +171,10 @@ if __name__ == "__main__":
                         help="width of canvas to render in pixels")
     parser.add_argument("--height", type=int, default=512,
                         help="height of canvas to render in pixels")
+    parser.add_argument("--rows", type=int, default=3,
+                        help="number of rows of anchors")
+    parser.add_argument("--cols", type=int, default=3,
+                        help="number of columns of anchors")
     parser.add_argument("--xmin", type=int, default=0,
                         help="min x in virtual space")
     parser.add_argument("--xmax", type=int, default=100,
@@ -175,6 +191,8 @@ if __name__ == "__main__":
                         help="use image as source of anchors")
     parser.add_argument('--anchor-splash', dest='anchor_splash', default=None,
                         help="use image as single source of splash coordinates")    
+    parser.add_argument('--random-splash', dest='random_splash', default=False, action='store_true',
+                        help="use random sampling as source of splash coordinates")
     parser.add_argument('--mask-layout', dest='mask_layout', default=None,
                         help="use image as source of splash grid points")    
     parser.add_argument('--layout', dest='layout', default=None,
@@ -201,6 +219,7 @@ if __name__ == "__main__":
     elif args.anchor_splash is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_splash, image_size=(gsize, gsize))
 
+    anchors = None
     if not args.passthrough:
         print('Loading saved model...')
         model = Model(load(args.model).algorithm.cost)
@@ -208,6 +227,9 @@ if __name__ == "__main__":
         if anchor_images is not None:
             # anchors = anchor_images
             anchors = get_image_vectors(model, anchor_images)
+
+    if anchors is None:
+        anchors = np.random.normal(loc=0, scale=1, size=(args.cols * args.rows, 100))
 
     anchor_offsets = None
     if args.anchor_offset is not None:
@@ -234,8 +256,8 @@ if __name__ == "__main__":
                 output_image = anchor_images[r]
                 canvas.place_image(output_image, x, y)
             else:
-                if args.anchor_splash is not None:
-                    z = compute_splash_latent(3, 3, b, a, anchors)
+                if args.anchor_splash is not None or args.random_splash:
+                    z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
                 elif anchor_offsets is not None:
                     z = apply_anchor_offsets(anchors[r], anchor_offsets, a, b, args.anchor_offset_a, args.anchor_offset_b)
                 else:
@@ -268,8 +290,7 @@ if __name__ == "__main__":
                     output_image = anchor_images[0]
                     canvas.place_image(output_image, x, y)
                 else:
-                    # z = compute_splash_latent(10, 10, b, a, anchors)
-                    z = compute_splash_latent(3, 3, b, a, anchors)
+                    z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
                     workq.append({
                             "z": z,
                             "x": x,
