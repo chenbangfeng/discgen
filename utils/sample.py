@@ -52,7 +52,7 @@ def get_dataset_iterator(dataset, split, include_targets=False):
     it = train_stream.get_epoch_iterator()
     return it
 
-def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, prohibited, color_convert=False, include_targets=True):
+def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, prohibited, image_size, color_convert=False, include_targets=True):
     it = get_dataset_iterator(dataset, split, include_targets)
 
     anchors = []
@@ -74,7 +74,7 @@ def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, pro
 
         if candidate_passes:
             if color_convert:
-                anchors.append(np.tile(cur[0].reshape(1, g_image_size, g_image_size), (3, 1, 1)))
+                anchors.append(np.tile(cur[0].reshape(1, image_size, image_size), (3, 1, 1)))
             else:
                 anchors.append(cur[0])
 
@@ -323,7 +323,7 @@ if __name__ == "__main__":
             allowed = map(int, args.allowed.split(","))
         if(args.prohibited):
             prohibited = map(int, args.prohibited.split(","))
-        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.color_convert)
+        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.image_size, args.color_convert)
 
     if args.anchor_image is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(args.image_size, args.image_size))
