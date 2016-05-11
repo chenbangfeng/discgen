@@ -23,7 +23,7 @@ from theano import tensor
 
 from discgen.utils import create_custom_streams
 
-g_image_size = 128
+g_image_size = 256
 
 def create_model_bricks():
     convnet = ConvolutionalSequence(
