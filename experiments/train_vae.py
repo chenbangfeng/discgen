@@ -28,10 +28,10 @@ from theano import tensor
 from discgen.utils import create_celeba_streams, create_custom_streams
 from utils.samplecheckpoint import SampleCheckpoint
 
-g_image_size = 128
-g_image_size2 = 64
-g_image_size3 = 32
-g_image_size4 = 16
+g_image_size = 256
+g_image_size2 = g_image_size/2
+g_image_size3 = g_image_size/4
+g_image_size4 = g_image_size/8
 
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
