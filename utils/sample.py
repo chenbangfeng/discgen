@@ -190,7 +190,7 @@ def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minsca
 
 def get_global_offset(offsets, indices_str, scale):
     dim = len(offsets[0])
-    global_offset = offset_from_string(indices_str, dim)
+    global_offset = offset_from_string(indices_str, offsets, dim)
     return scale * global_offset
 
 def stream_output_vectors(model, dataset, split, color_convert=False):
