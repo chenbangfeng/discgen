@@ -69,13 +69,13 @@ def additive_composite(src, src_mask, dst):
     np.clip(out,0,1.0)
     return out
 
-gsize = 64
-gsize2 = gsize/2
+# gsize = 64
+# gsize2 = gsize/2
 
 class Canvas:
     """Simple Canvas Thingy"""
 
-    def __init__(self, width, height, xmin, xmax, ymin, ymax, mask_name, init_black=False):
+    def __init__(self, width, height, xmin, xmax, ymin, ymax, mask_name, image_size, init_black=False):
         self.pixels = np.zeros((channels, height, width))
         if init_black:
             alpha_channel = np.index_exp[3:, :, :]
@@ -96,7 +96,10 @@ class Canvas:
         self.xspread_ratio = float(self.canvas_xspread) / self.xspread
         self.yspread_ratio = float(self.canvas_yspread) / self.yspread
 
-        _, _, mask_images = anchors_from_image("mask/{}_mask{}.png".format(mask_name, gsize), image_size=(gsize, gsize))
+        self.gsize = image_size
+        self.gsize2 = image_size/2
+
+        _, _, mask_images = anchors_from_image("mask/{}_mask{}.png".format(mask_name, image_size), image_size=(image_size, image_size))
         # _, _, mask_images = anchors_from_image("mask/rounded_mask{}.png".format(gsize), image_size=(gsize, gsize))
         # _, _, mask_images = anchors_from_image("mask/hexagons/hex1_{}_blur.png".format(gsize), image_size=(gsize, gsize))
         self.mask = mask_images[0][0]
@@ -113,13 +116,13 @@ class Canvas:
         return new_x, new_y
 
     def place_square(self, x, y):
-        square = np.zeros((channels, gsize, gsize))
+        square = np.zeros((channels, self.gsize, self.gsize))
         square.fill(1)
         cx, cy = self.map_to_canvas(x, y)
-        self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = square
+        self.pixels[:, (cy-self.gsize2):(cy+self.gsize2), (cx-self.gsize2):(cx+self.gsize2)] = square
 
     def check_bounds(self, cx, cy):
-        border = gsize2
+        border = self.gsize2
         if (cx < self.canvas_xmin + border) or (cy < self.canvas_ymin + border) or (cx >= self.canvas_xmax - border) or (cy >= self.canvas_ymax - border):
             return False
         return True
@@ -129,11 +132,11 @@ class Canvas:
         cx, cy = self.map_to_canvas(x, y)
         if self.check_bounds(cx, cy):
             if additive:
-                self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
-                    additive_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
+                self.pixels[:, (cy-self.gsize2):(cy+self.gsize2), (cx-self.gsize2):(cx+self.gsize2)] = \
+                    additive_composite(im, self.mask, self.pixels[:, (cy-self.gsize2):(cy+self.gsize2), (cx-self.gsize2):(cx+self.gsize2)])
             else:
-                self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)] = \
-                    alpha_composite(im, self.mask, self.pixels[:, (cy-gsize2):(cy+gsize2), (cx-gsize2):(cx+gsize2)])
+                self.pixels[:, (cy-self.gsize2):(cy+self.gsize2), (cx-self.gsize2):(cx+self.gsize2)] = \
+                    alpha_composite(im, self.mask, self.pixels[:, (cy-self.gsize2):(cy+self.gsize2), (cx-self.gsize2):(cx+self.gsize2)])
 
     def save(self, save_path):
         out = np.dstack(self.pixels)
@@ -163,10 +166,12 @@ def images_from_latents(z, model):
     return samples
 
 def apply_anchor_offsets(anchor, offsets, a, b, a_indices_str, b_indices_str):
+    sa = 2.0 * (a - 0.5)
+    sb = 2.0 * (b - 0.5)
     dim = len(anchor)
     a_offset = offset_from_string(a_indices_str, offsets, dim)
     b_offset = offset_from_string(b_indices_str, offsets, dim)
-    new_anchor = anchor + a * a_offset + b * b_offset
+    new_anchor = anchor + sa * a_offset + sb * b_offset
     # print(a, a*a_offset)
     return new_anchor
 
@@ -218,6 +223,8 @@ if __name__ == "__main__":
                         help="which indices to combine for offset a")
     parser.add_argument('--anchor-offset-b', dest='anchor_offset_b', default="31", type=str,
                         help="which indices to combine for offset b")
+    parser.add_argument("--image-size", dest='image_size', type=int, default=64,
+                        help="size of (offset) images")
     args = parser.parse_args()
 
     if args.seed:
@@ -226,9 +233,9 @@ if __name__ == "__main__":
 
     anchor_images = None
     if args.anchor_image is not None:
-        _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(gsize, gsize))
+        _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(args.image_size, args.image_size))
     elif args.anchor_splash is not None:
-        _, _, anchor_images = anchors_from_image(args.anchor_splash, image_size=(gsize, gsize))
+        _, _, anchor_images = anchors_from_image(args.anchor_splash, image_size=(args.image_size, args.image_size))
 
     anchors = None
     if not args.passthrough:
@@ -247,7 +254,7 @@ if __name__ == "__main__":
         # compute anchors as offsets from existing anchor
         anchor_offsets = get_json_vectors(args.anchor_offset)
 
-    canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax, args.mask_name)
+    canvas = Canvas(args.width, args.height, args.xmin, args.xmax, args.ymin, args.ymax, args.mask_name, args.image_size)
     workq = []
 
     do_hex = True
@@ -301,7 +308,10 @@ if __name__ == "__main__":
                     output_image = anchor_images[0]
                     canvas.place_image(output_image, x, y, args.additive)
                 else:
-                    z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
+                    if len(anchors) == 1 or anchor_offsets is not None:
+                        z = apply_anchor_offsets(anchors[0], anchor_offsets, a, b, args.anchor_offset_a, args.anchor_offset_b)
+                    else:
+                        z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
                     workq.append({
                             "z": z,
                             "x": x,
