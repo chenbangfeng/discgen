@@ -427,11 +427,19 @@ def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
         xmax_ymax = np.random.normal(0, 1, dim)
 
     for y in range(rows):
-        y_frac = y / (rows - 1)
+        if  y == 0:
+            # allows rows == 0
+            y_frac = 0
+        else:
+            y_frac = y / (rows - 1)
         xmin_ycur = lerpv(y_frac, xmin_ymin, xmin_ymax)
         xmax_ycur = lerpv(y_frac, xmax_ymin, xmax_ymax)
         for x in range(cols):
-            x_frac = x / (cols - 1)
+            if x == 0:
+                # allows cols == 0
+                x_frac = 0
+            else:
+                x_frac = x / (cols - 1)
             xcur_ycur = lerpv(x_frac, xmin_ycur, xmax_ycur)
             n = y * cols + x
             u_list[n:n+1,:] = xcur_ycur

@@ -17,8 +17,10 @@ class SampleCheckpoint(Checkpoint):
         self.save_subdir = save_subdir
         self.iteration = 0
         self.epoch_src = "{0}/sample.png".format(save_subdir)
-        self.rows=7
-        self.cols=13
+        # self.rows=7
+        # self.cols=13
+        self.rows=4
+        self.cols=7
         # self.z = generate_latent_grid(z_dim, rows=self.rows, cols=self.cols, flat=False, gradient=False, spherical=True, gaussian=False,
         #     anchors=False, anchor_images=None, splash=False, spacing=3, analogy=False)
         # anchors = np.random.normal(loc=0, scale=1, size=( * , z_dim))
