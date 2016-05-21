@@ -2,6 +2,7 @@
 import argparse
 import logging
 
+import sys
 import numpy
 import theano
 from blocks.algorithms import GradientDescent, Adam
@@ -32,6 +33,7 @@ g_image_size = 256
 g_image_size2 = g_image_size/2
 g_image_size3 = g_image_size/4
 g_image_size4 = g_image_size/8
+g_image_size5 = g_image_size/16
 
 def create_model_bricks(z_dim):
     encoder_convnet = ConvolutionalSequence(
@@ -120,6 +122,27 @@ def create_model_bricks(z_dim):
                 name='conv12'),
             SpatialBatchNormalization(name='batch_norm12'),
             Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=512,
+                name='conv13'),
+            SpatialBatchNormalization(name='batch_norm13'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=512,
+                name='conv14'),
+            SpatialBatchNormalization(name='batch_norm14'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(2, 2),
+                step=(2, 2),
+                num_filters=512,
+                name='conv15'),
+            SpatialBatchNormalization(name='batch_norm15'),
+            Rectifier(),
         ],
         num_channels=3,
         image_size=(g_image_size, g_image_size),
@@ -151,6 +174,28 @@ def create_model_bricks(z_dim):
 
     decoder_convnet = ConvolutionalSequence(
         layers=[
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=512,
+                name='conv_n3'),
+            SpatialBatchNormalization(name='batch_norm_n3'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=512,
+                name='conv_n2'),
+            SpatialBatchNormalization(name='batch_norm_n2'),
+            Rectifier(),
+            ConvolutionalTranspose(
+                filter_size=(2, 2),
+                step=(2, 2),
+                original_image_size=(g_image_size5, g_image_size5),
+                num_filters=512,
+                name='conv_n1'),
+            SpatialBatchNormalization(name='batch_norm_n1'),
+            Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
                 border_mode=(1, 1),
@@ -405,6 +450,8 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     algorithm.add_updates(extra_updates)
 
     # Prepare monitoring
+    sys.setrecursionlimit(1000000)
+
     monitored_quantities_list = []
     for graph in [bn_cg, cg]:
         cost, kl_term, reconstruction_term, discriminative_term = graph.outputs
@@ -429,7 +476,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
 
     # Prepare checkpoint
     checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every,
-                            use_cpickle=True)
+                            before_training=True, use_cpickle=True)
 
     # TODO: why does z_dim=foo become foo/2?
     extensions = [Timing(), FinishAfter(after_n_epochs=100), checkpoint,
