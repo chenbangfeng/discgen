@@ -217,13 +217,15 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
             for v in latents:
                 print("JSON#{},".format(vector_to_json_array(v)))
         except StopIteration:
-            anchors_input = np.array(anchors)
-            examples, latents = encoder_function(anchors_input)
-            # end cut-n-paste
-            for v in latents[:-1]:
-                print("JSON#{},".format(vector_to_json_array(v)))
-            for v in latents[-1:]:
-                print("JSON#{}".format(vector_to_json_array(v)))
+            # process any leftovers
+            if len(anchors) > 0:
+                anchors_input = np.array(anchors)
+                examples, latents = encoder_function(anchors_input)
+                # end cut-n-paste
+                for v in latents[:-1]:
+                    print("JSON#{},".format(vector_to_json_array(v)))
+                for v in latents[-1:]:
+                    print("JSON#{}".format(vector_to_json_array(v)))
             done = True
 
     # for v in vectors[-1:]:
