@@ -115,7 +115,7 @@ def generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian,
 
     return z
 
-def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path):
+def samples_from_latents(z, model):
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
     decoder_convnet, = selector.select('/decoder_convnet').bricks
@@ -133,6 +133,10 @@ def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, sav
 
     print('Sampling...')
     samples = sampling_function()
+    return samples
+
+def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path):
+    samples = samples_from_latents(z, model)
 
     if shoulders:
         samples, rows, cols = add_shoulders(samples, anchor_images, rows, cols)
