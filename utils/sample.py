@@ -17,7 +17,6 @@ import numpy as np
 import random
 import sys
 import json
-from scipy.misc import imread, imsave
 
 from discgen.utils import plot_image_grid
 from sample_utils import anchors_from_image, get_image_encoder_function, get_image_vectors, get_json_vectors, offset_from_string
