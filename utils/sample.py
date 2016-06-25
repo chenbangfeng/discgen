@@ -81,10 +81,15 @@ def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, pro
 
 # returns new version of images, rows, cols
 def add_shoulders(images, anchor_images, rows, cols):
-    ncols = cols + 2
+    n_anchors = len(anchor_images)
+    if n_anchors == 1:
+        ncols = cols + 1
+        col_offset = 0
+    else:
+        ncols = cols + 2
+        col_offset = 1
     nimages = []
     cur_im = 0
-    n_anchors = len(anchor_images)
     for j in range(rows):
         for i in range(ncols):
             if i == 0 and j == 0 and n_anchors > 0:
@@ -93,7 +98,7 @@ def add_shoulders(images, anchor_images, rows, cols):
                 nimages.append(anchor_images[1])
             elif i == ncols-1 and j == 0 and n_anchors > 2:
                 nimages.append(anchor_images[2])
-            elif i > 0 and i < ncols-1:
+            elif i > 0 and i < ncols-col_offset:
                 nimages.append(images[cur_im])
                 cur_im = cur_im + 1
             else:
