@@ -582,7 +582,7 @@ if __name__ == "__main__":
                         help="Subdirectory for output files (images)")
     parser.add_argument("--image-size", dest='image_size', type=int, default=64,
                         help="size of (offset) images")
-    parser.add_argument("--net-depth", dest='net_depth', type=int, default=64,
+    parser.add_argument("--net-depth", dest='net_depth', type=int, default=5,
                         help="network depth from 1-5")
     args = parser.parse_args()
     disc_weights = map(float, args.discriminative_layer_weights.split(","))
