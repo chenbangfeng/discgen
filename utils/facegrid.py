@@ -103,6 +103,51 @@ def neighbors_to_grid(neighbors, imdata, gsize, with_center=False):
         canvas[offy:offy+gsize, offx:offx+gsize, :] = im
     return Image.fromarray(canvas)
 
+def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
+
+    from tsne import bh_sne
+    canvas = np.zeros((gsize*3, gsize*5, 3)).astype(np.uint8)
+
+    vectors_list = []
+    for n in neighbors:
+        vectors_list.append(encoded[n])
+    vectors = np.array(vectors_list)
+    xy = bh_sne(vectors, perplexity=4., theta=0)
+
+    import matplotlib.pyplot as plt
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.set_axis_bgcolor('black')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.axes.get_xaxis().set_visible(False)
+    ax.axes.get_yaxis().set_visible(False)
+    ax.autoscale_view(True,True,True)
+    ax.invert_yaxis()
+    ax.scatter(xy[:,0],xy[:,1],  edgecolors='none',marker='s',s=7.5)  # , c = vectors[:,:3]
+    plt.savefig("plot.png")
+
+    from rasterfairy import rasterfairy
+    grid_xy, quadrants = rasterfairy.transformPointCloud2D(xy,target=(5,3))
+    indices = []
+    for i in range(15):
+        indices.append(quadrants[i]["indices"][0])
+
+    i = 0
+    for cur_y in range(3):
+        for cur_x in range(5):
+            cur_index = indices[i]
+            n = neighbors[cur_index]
+            im = np.dstack(imdata[n]).astype(np.uint8)
+            offy = gsize * cur_y
+            offx = gsize * cur_x
+            canvas[offy:offy+gsize, offx:offx+gsize, :] = im
+            i = i + 1
+
+    return Image.fromarray(canvas)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument('--build_annoy', dest='build_annoy',
@@ -125,9 +170,9 @@ if __name__ == "__main__":
                         help="Range of indexes to run.")
     args = parser.parse_args()
 
+    encoded = json_list_to_array(args.jsons)
+    print(encoded.shape)
     if args.build_annoy:
-        encoded = json_list_to_array(args.jsons)
-        print(encoded.shape)
         aindex = build_annoy_index(encoded, args.annoy_index)
         sys.exit(0)
 
@@ -142,8 +187,9 @@ if __name__ == "__main__":
     if len(r) == 1:
         r = [r[0], r[0]+1]
     for i in range(r[0], r[1]):
-        neighbors = aindex.get_nns_by_item(i, 20, include_distances=True) # will find the 20 nearest neighbors
-        g = neighbors_to_grid(neighbors[0], data[0], image_size, with_center=True)
+        neighbors = aindex.get_nns_by_item(i, 15, include_distances=True) # will find the 20 nearest neighbors
+        # g = neighbors_to_grid(neighbors[0], data[0], image_size, with_center=True)
+        g = neighbors_to_rfgrid(neighbors[0], encoded, data[0], image_size)
         g.save("{}/index_{:03d}.png".format(args.outdir, i))
 
 # 'encodings/celeba_dlib_128_200z_a02.annoy'
