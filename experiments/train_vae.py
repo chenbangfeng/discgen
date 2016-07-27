@@ -356,6 +356,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         classifier_model = Model(load(classifer).algorithm.cost)
         selector = Selector(classifier_model.top_bricks)
         classifier_convnet, = selector.select('/convnet').bricks
+        classifier_mlp, = selector.select('/mlp').bricks
     random_brick = Random()
 
     # Initialize conditional variances
