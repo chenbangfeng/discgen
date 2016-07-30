@@ -103,3 +103,54 @@ def offset_from_string(x_indices_str, offsets, dim):
         x_offset += scaling * offsets[x_index]
     return x_offset
 
+### Recent additions
+
+def get_dataset_iterator(dataset, split, include_targets=False, unit_scale=True):
+    sources = ('features', 'targets') if include_targets else ('features',)
+    if split == "all":
+        splits = ('train', 'valid', 'test')
+    elif split == "nontrain":
+        splits = ('valid', 'test')
+    else:
+        splits = (split,)
+
+    dataset_fname = find_in_data_path("{}.hdf5".format(dataset))
+    datastream = H5PYDataset(dataset_fname, which_sets=splits,
+                             sources=sources)
+    if unit_scale:
+        datastream.default_transformers = uint8_pixels_to_floatX(('features',))
+
+    train_stream = DataStream.default_stream(
+        dataset=datastream,
+        iteration_scheme=SequentialExampleScheme(datastream.num_examples))
+
+    it = train_stream.get_epoch_iterator()
+    return it
+
+def get_anchor_images(dataset, split, offset, stepsize, numanchors, allowed, prohibited, image_size, color_convert=False, include_targets=True):
+    it = get_dataset_iterator(dataset, split, include_targets)
+
+    anchors = []
+    for i in range(offset):
+        cur = it.next()
+    while len(anchors) < numanchors:
+        cur = it.next()
+        for s in range(stepsize-1):
+            it.next()
+        candidate_passes = True
+        if allowed:
+            for p in allowed:
+                if(cur[1][p] != 1):
+                    candidate_passes = False
+        if prohibited:
+            for p in prohibited:
+                if(cur[1][p] != 0):
+                    candidate_passes = False
+
+        if candidate_passes:
+            if color_convert:
+                anchors.append(np.tile(cur[0].reshape(1, image_size, image_size), (3, 1, 1)))
+            else:
+                anchors.append(cur[0])
+
+    return np.array(anchors)
