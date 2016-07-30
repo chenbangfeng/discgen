@@ -25,7 +25,7 @@ from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
 from annoy import AnnoyIndex
 from sklearn.manifold import TSNE
-from sample_utils import get_anchor_images
+from sample_utils import get_anchor_images, anchors_from_image
 
 def json_list_to_array(json_list):
     files = json_list.split(",")
@@ -101,8 +101,8 @@ def debug_save_plot(xy, filename):
     ax.scatter(xy[:,0],xy[:,1],  edgecolors='none',marker='s',s=7.5)  # , c = vectors[:,:3]
     plt.savefig(filename)
 
-def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
-    canvas = np.zeros((gsize*3, gsize*5, 3)).astype(np.uint8)
+def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize, gridw, gridh):
+    canvas = np.zeros((gsize*gridh, gsize*gridw, 3)).astype(np.uint8)
 
     vectors_list = []
     for n in neighbors:
@@ -116,14 +116,14 @@ def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
     # debug_save_plot(xy, "plot.png")
 
     from rasterfairy import rasterfairy
-    grid_xy, quadrants = rasterfairy.transformPointCloud2D(xy,target=(5,3))
+    grid_xy, quadrants = rasterfairy.transformPointCloud2D(xy,target=(gridw,gridh))
     indices = []
-    for i in range(15):
+    for i in range(gridw * gridh):
         indices.append(quadrants[i]["indices"][0])
 
     i = 0
-    for cur_y in range(3):
-        for cur_x in range(5):
+    for cur_y in range(gridh):
+        for cur_x in range(gridw):
             cur_index = indices[i]
             n = neighbors[cur_index]
             im = np.dstack(imdata[n]).astype(np.uint8)
@@ -136,13 +136,17 @@ def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
-    parser.add_argument('--build_annoy', dest='build_annoy',
+    parser.add_argument('--build-annoy', dest='build_annoy',
                         default=False, action='store_true')
     parser.add_argument("--jsons", type=str, default=None,
                         help="Comma separated list of json arrays")
     parser.add_argument('--dataset', dest='dataset', default=None,
                         help="Source dataset.")
-    parser.add_argument('--annoy_index', dest='annoy_index', default=None,
+    parser.add_argument('--dataset-image', dest='dataset_image', default=None,
+                        help="use image as source dataset")
+    parser.add_argument("--dataset-offset", dest='dataset_offset', type=int, default=0,
+                        help="dataset offset to skip")
+    parser.add_argument('--annoy-index', dest='annoy_index', default=None,
                         help="Annoy index.")
     parser.add_argument('--split', dest='split', default="all",
                         help="Which split to use from the dataset (train/nontrain/valid/test/any).")
@@ -154,7 +158,11 @@ if __name__ == "__main__":
                         help="Output dir for neighborgrids.")
     parser.add_argument('--outfile', dest='outfile', default="index_{:03d}.png",
                         help="Output file (template) for neighborgrids.")
-    parser.add_argument('--range', dest='range', default="0,100",
+    parser.add_argument("--outgrid-width", dest='outgrid_width', type=int, default=5,
+                        help="width of output grid")
+    parser.add_argument("--outgrid-height", dest='outgrid_height', type=int, default=3,
+                        help="height of output grid")
+    parser.add_argument('--range', dest='range', default="0",
                         help="Range of indexes to run.")
     args = parser.parse_args()
 
@@ -166,18 +174,29 @@ if __name__ == "__main__":
 
     # open annoy index and spit out some neighborgrids
     aindex = load_annoy_index(args.annoy_index, args.z_dim)
-    anchor_images = get_anchor_images(args.dataset, args.split, numanchors=None, unit_scale=False)
-    image_size = anchor_images.shape[2]
+    if args.dataset is not None:
+        anchor_images = get_anchor_images(args.dataset, args.split, offset=args.dataset_offset, numanchors=None, unit_scale=False)
+        image_size = anchor_images.shape[2]
+    # dataset_image requires image_size
+    if args.dataset_image is not None:
+        image_size = args.image_size
+        _, _, anchor_images = anchors_from_image(args.dataset_image, image_size=(image_size, image_size), unit_scale=False)
+        if args.dataset_offset > 0:
+            anchor_images = anchor_images[args.dataset_offset:]
+
+    print anchor_images.shape
+
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir)
 
     r = map(int, args.range.split(","))
     if len(r) == 1:
         r = [r[0], r[0]+1]
+    num_out_cells = args.outgrid_width * args.outgrid_height
     for i in range(r[0], r[1]):
-        neighbors = aindex.get_nns_by_item(i, 15, include_distances=True) # will find the 20 nearest neighbors
+        neighbors = aindex.get_nns_by_item(i, num_out_cells, include_distances=True) # will find the 20 nearest neighbors
         # g = neighbors_to_grid(neighbors[0], data[0], image_size, with_center=True)
-        g = neighbors_to_rfgrid(neighbors[0], encoded, anchor_images, image_size)
+        g = neighbors_to_rfgrid(neighbors[0], encoded, anchor_images, image_size, args.outgrid_width, args.outgrid_height)
         out_template = "{}/{}".format(args.outdir, args.outfile)
         g.save(out_template.format(i))
 

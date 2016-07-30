@@ -28,7 +28,7 @@ from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
 
-def anchors_from_image(fname, channels=3, image_size=(64,64)):
+def anchors_from_image(fname, channels=3, image_size=(64,64), unit_scale=True):
     rawim = imread(fname);
     if(channels == 1):
         im_height, im_width, im_channels = rawim.shape
@@ -51,12 +51,16 @@ def anchors_from_image(fname, channels=3, image_size=(64,64)):
         for i in range(steps_x):
             cur_x = i * width
             if(channels == 1):
-                entry = (mixedim[cur_y:cur_y+height, cur_x:cur_x+width] / 255.0).astype('float32')
+                # entry = (mixedim[cur_y:cur_y+height, cur_x:cur_x+width] / 255.0).astype('float32')
+                entry = mixedim[cur_y:cur_y+height, cur_x:cur_x+width]
             else:
-                entry = (mixedim[0:im_channels, cur_y:cur_y+height, cur_x:cur_x+width] / 255.0).astype('float32')
+                # entry = (mixedim[0:im_channels, cur_y:cur_y+height, cur_x:cur_x+width] / 255.0).astype('float32')
+                entry = mixedim[0:im_channels, cur_y:cur_y+height, cur_x:cur_x+width]
+            if unit_scale:
+                entry = (entry / 255.0).astype('float32')
             datastream_images.append(entry)
 
-    return steps_y, steps_x, datastream_images
+    return steps_y, steps_x, np.array(datastream_images)
 
 def get_image_encoder_function(model):
     selector = Selector(model.top_bricks)
