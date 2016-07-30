@@ -24,6 +24,7 @@ from PIL import Image
 from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
 from annoy import AnnoyIndex
+from sklearn.manifold import TSNE
 
 def json_list_to_array(json_list):
     files = json_list.split(",")
@@ -103,17 +104,7 @@ def neighbors_to_grid(neighbors, imdata, gsize, with_center=False):
         canvas[offy:offy+gsize, offx:offx+gsize, :] = im
     return Image.fromarray(canvas)
 
-def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
-
-    from tsne import bh_sne
-    canvas = np.zeros((gsize*3, gsize*5, 3)).astype(np.uint8)
-
-    vectors_list = []
-    for n in neighbors:
-        vectors_list.append(encoded[n])
-    vectors = np.array(vectors_list)
-    xy = bh_sne(vectors, perplexity=4., theta=0)
-
+def debug_save_plot(xy, filename):
     import matplotlib.pyplot as plt
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
@@ -127,7 +118,22 @@ def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
     ax.autoscale_view(True,True,True)
     ax.invert_yaxis()
     ax.scatter(xy[:,0],xy[:,1],  edgecolors='none',marker='s',s=7.5)  # , c = vectors[:,:3]
-    plt.savefig("plot.png")
+    plt.savefig(filename)
+
+def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize):
+    from tsne import bh_sne
+    canvas = np.zeros((gsize*3, gsize*5, 3)).astype(np.uint8)
+
+    vectors_list = []
+    for n in neighbors:
+        vectors_list.append(encoded[n])
+    vectors = np.array(vectors_list)
+
+    RS = 20150101
+    # xy = bh_sne(vectors, perplexity=4., theta=0)
+    xy = TSNE(init='pca', learning_rate=100, random_state=RS, method='exact', perplexity=4).fit_transform(vectors)
+
+    # debug_save_plot(xy, "plot.png")
 
     from rasterfairy import rasterfairy
     grid_xy, quadrants = rasterfairy.transformPointCloud2D(xy,target=(5,3))
