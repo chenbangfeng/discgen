@@ -172,6 +172,8 @@ if __name__ == "__main__":
                         help="z dimension")
     parser.add_argument('--outdir', dest='outdir', default="neighborgrids",
                         help="Output dir for neighborgrids.")
+    parser.add_argument('--outfile', dest='outfile', default="index_{:03d}.png",
+                        help="Output file (template) for neighborgrids.")
     parser.add_argument('--range', dest='range', default="0,100",
                         help="Range of indexes to run.")
     args = parser.parse_args()
@@ -196,6 +198,7 @@ if __name__ == "__main__":
         neighbors = aindex.get_nns_by_item(i, 15, include_distances=True) # will find the 20 nearest neighbors
         # g = neighbors_to_grid(neighbors[0], data[0], image_size, with_center=True)
         g = neighbors_to_rfgrid(neighbors[0], encoded, data[0], image_size)
-        g.save("{}/index_{:03d}.png".format(args.outdir, i))
+        out_template = "{}/{}".format(args.outdir, args.outfile)
+        g.save(out_template.format(i))
 
 # 'encodings/celeba_dlib_128_200z_a02.annoy'
