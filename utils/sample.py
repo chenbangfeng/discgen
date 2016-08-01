@@ -291,6 +291,9 @@ if __name__ == "__main__":
         _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(args.image_size, args.image_size))
         if args.offset > 0:
             anchor_images = anchor_images[args.offset:]
+        # untested
+        if args.numanchors is not None:
+            anchor_images = anchor_images[:args.numanchors]
 
     if args.passthrough:
         print('Preparing image grid...')

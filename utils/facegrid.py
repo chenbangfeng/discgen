@@ -21,11 +21,13 @@ import sys
 
 from PIL import Image
 
+from blocks.model import Model
+from blocks.serialization import load
 from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
 from annoy import AnnoyIndex
 from sklearn.manifold import TSNE
-from sample_utils import get_anchor_images, anchors_from_image
+from sample_utils import get_anchor_images, anchors_from_image, get_image_vectors
 
 def json_list_to_array(json_list):
     files = json_list.split(",")
@@ -146,6 +148,12 @@ if __name__ == "__main__":
                         help="use image as source dataset")
     parser.add_argument("--dataset-offset", dest='dataset_offset', type=int, default=0,
                         help="dataset offset to skip")
+    parser.add_argument("--dataset-max", type=int, default=None,
+                        help="Source dataset.")
+    parser.add_argument('--seeds-image', dest='seeds_image', default=None,
+                        help="image source of seeds")
+    parser.add_argument("--model", dest='model', type=str, default=None,
+                        help="model for encoding when seeds-images is enabled")
     parser.add_argument('--annoy-index', dest='annoy_index', default=None,
                         help="Annoy index.")
     parser.add_argument('--split', dest='split', default="all",
@@ -175,7 +183,7 @@ if __name__ == "__main__":
     # open annoy index and spit out some neighborgrids
     aindex = load_annoy_index(args.annoy_index, args.z_dim)
     if args.dataset is not None:
-        anchor_images = get_anchor_images(args.dataset, args.split, offset=args.dataset_offset, numanchors=None, unit_scale=False)
+        anchor_images = get_anchor_images(args.dataset, args.split, offset=args.dataset_offset, numanchors=args.dataset_max, unit_scale=False)
         image_size = anchor_images.shape[2]
     # dataset_image requires image_size
     if args.dataset_image is not None:
@@ -183,21 +191,48 @@ if __name__ == "__main__":
         _, _, anchor_images = anchors_from_image(args.dataset_image, image_size=(image_size, image_size), unit_scale=False)
         if args.dataset_offset > 0:
             anchor_images = anchor_images[args.dataset_offset:]
+        if args.dataset_max is not None:
+            anchor_images = anchor_images[:args.dataset_max]
+
+
+    r = map(int, args.range.split(","))
+
+    core_dataset_size = len(anchor_images)
+    if(len(encoded) != core_dataset_size):
+        print("Warning: {} vectors and {} images".format(len(encoded), core_dataset_size))
+    if args.seeds_image is not None:
+        image_size = args.image_size
+        _, _, extra_images = anchors_from_image(args.seeds_image, image_size=(image_size, image_size), unit_scale=False)
+        net_inputs = (extra_images / 255.0).astype('float32')
+        print('Loading saved model...')
+        model = Model(load(args.model).algorithm.cost)
+        image_vectors = get_image_vectors(model, net_inputs)
+        num_extras = len(extra_images)
+        encoded = np.concatenate((encoded, image_vectors), axis=0)
+        anchor_images = np.concatenate((anchor_images, extra_images), axis=0)
+        # for now, override given range
+        r = [core_dataset_size, core_dataset_size + num_extras]
 
     print anchor_images.shape
 
     if not os.path.exists(args.outdir):
         os.makedirs(args.outdir)
 
-    r = map(int, args.range.split(","))
     if len(r) == 1:
         r = [r[0], r[0]+1]
     num_out_cells = args.outgrid_width * args.outgrid_height
     for i in range(r[0], r[1]):
-        neighbors = aindex.get_nns_by_item(i, num_out_cells, include_distances=True) # will find the 20 nearest neighbors
-        # g = neighbors_to_grid(neighbors[0], data[0], image_size, with_center=True)
+        if i < core_dataset_size:
+            neighbors = aindex.get_nns_by_item(i, num_out_cells, include_distances=True) # will find the 20 nearest neighbors
+            file_num = i
+        else:
+            neighbors = aindex.get_nns_by_vector(encoded[i], num_out_cells-1, include_distances=True) # will find the 20 nearest neighbors
+            neighbors[0].append(i)
+            neighbors[1].append(0)
+            file_num = i - core_dataset_size
+
         g = neighbors_to_rfgrid(neighbors[0], encoded, anchor_images, image_size, args.outgrid_width, args.outgrid_height)
         out_template = "{}/{}".format(args.outdir, args.outfile)
-        g.save(out_template.format(i))
+        g.save(out_template.format(file_num))
 
 # 'encodings/celeba_dlib_128_200z_a02.annoy'
