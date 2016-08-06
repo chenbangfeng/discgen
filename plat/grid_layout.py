@@ -40,6 +40,34 @@ def grid2img(arr, rows, cols, with_space):
     out = (255 * out).astype(np.uint8)
     return Image.fromarray(out)
 
+def create_chain_grid(rows, cols, dim, space, anchors, spherical, gaussian):
+    """Create a grid of latents with chained-analogy layout"""
+    ## Map (r/s + c/w - 1) anchors to r/s * c/s, then call create_splash_grid
+    num_row_anchors = (rows + space - 1) / space
+    num_col_anchors = (cols + space - 1) / space
+    u_list = np.zeros((num_row_anchors, num_col_anchors, dim))    
+    for y in range(num_row_anchors):
+        for x in range(num_col_anchors):
+            if x == 0 or y == 0:
+                if x == 0 and y == 0:
+                    anchor_index = 0
+                elif x == 0:
+                    anchor_index = y * 2 - 1
+                else:
+                    anchor_index = x * 2
+                u_list[y,x,:] = anchors[anchor_index]
+            else:
+                anal_vec = u_list[y,x-1,:] + (u_list[y-1,x,:] - u_list[y-1,x-1,:])
+                anal_len = np.linalg.norm(anal_vec)
+                anal_unit_vec = np.nan_to_num(anal_vec / anal_len)
+                avg_len = (np.linalg.norm(u_list[y,x-1,:]) +
+                    np.linalg.norm(u_list[y-1,x,:]) +
+                    np.linalg.norm(u_list[y-1,x-1,:])) / 3.0
+                u_list[y,x,:] = avg_len * anal_unit_vec
+
+    u_grid = u_list.reshape(num_row_anchors * num_col_anchors, dim)
+    return create_splash_grid(rows, cols, dim, space, u_grid, spherical, gaussian)
+
 def create_splash_grid(rows, cols, dim, space, anchors, spherical, gaussian):
     """Create a grid of latents with splash layout"""
     lerpv = get_interpfn(spherical, gaussian)
@@ -204,4 +232,3 @@ def create_fan_grid(z_dim, cols, rows, gaussian_prior=True, interleaves=0, shuff
             ul.append(cdfed)
     u = np.array(ul).reshape(rows,cols,z_dim).astype('float32')
     return u
-

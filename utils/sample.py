@@ -28,7 +28,7 @@ from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
 
-from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid, create_fan_grid
+from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid, create_chain_grid, create_fan_grid
 
 g_image_size = 128
 
@@ -59,13 +59,15 @@ def add_shoulders(images, anchor_images, rows, cols):
     return nimages, rows, ncols
 
 # returns list of latent variables to support rows x cols 
-def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy):
+def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, anchors, anchor_images, splash, chain, spacing, analogy):
     if fan:
         z = create_fan_grid(z_dim, cols, rows)
     elif gradient:
         z = create_gradient_grid(rows, cols, z_dim, analogy, anchors, spherical, gaussian)
     elif splash:
         z = create_splash_grid(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
+    elif chain:
+        z = create_chain_grid(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
     else:
         # TODO: non-gaussian version
         z = np.random.normal(loc=0, scale=1, size=(rows * cols, z_dim))
@@ -227,6 +229,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int,
                 default=None, help="Optional random seed")
     parser.add_argument('--splash', dest='splash', default=False, action='store_true')
+    parser.add_argument('--chain', dest='chain', default=False, action='store_true')
     parser.add_argument('--encircle', dest='encircle', default=False, action='store_true')
     parser.add_argument('--partway', dest='partway', type=float, default=None)
     parser.add_argument("--spacing", type=int, default=3,
@@ -329,6 +332,7 @@ if __name__ == "__main__":
     selector = Selector(model.top_bricks)
     decoder_mlp, = selector.select('/decoder_mlp').bricks
     z_dim = decoder_mlp.input_dim
+    # I don't remember what partway/encircle do so they are not handling the chain layout
     if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
         srows=((args.rows // args.spacing) + 1)
         scols=((args.cols // args.spacing) + 1)
@@ -343,7 +347,7 @@ if __name__ == "__main__":
         else:
             anchors = rand_anchors
     z = generate_latent_grid(z_dim, args.rows, args.cols, args.fan, args.gradient, not args.linear, args.gaussian,
-            anchors, anchor_images, args.splash, args.spacing, args.analogy)
+            anchors, anchor_images, args.splash, args.chain, args.spacing, args.analogy)
     if global_offset is not None:
         z = z + global_offset
 
