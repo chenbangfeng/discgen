@@ -12,7 +12,6 @@ from blocks.serialization import load
 from blocks.utils import shared_floatx
 from blocks.config import config
 from theano import tensor
-from utils.modelutil import compute_splash_latent
 import numpy as np
 import random
 import sys
@@ -28,6 +27,8 @@ from fuel.transformers.defaults import uint8_pixels_to_floatX
 from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
+
+from plat.canvas_layout import create_splash_canvas
 
 from PIL import Image
 
@@ -275,7 +276,7 @@ if __name__ == "__main__":
                 canvas.place_image(output_image, x, y, args.additive)
             else:
                 if args.anchor_splash is not None or args.random_splash:
-                    z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
+                    z = create_splash_canvas(args.rows, args.cols, b, a, anchors)
                 elif anchor_offsets is not None:
                     z = apply_anchor_offsets(anchors[r], anchor_offsets, a, b, args.anchor_offset_a, args.anchor_offset_b)
                 else:
@@ -311,7 +312,7 @@ if __name__ == "__main__":
                     if len(anchors) == 1 or anchor_offsets is not None:
                         z = apply_anchor_offsets(anchors[0], anchor_offsets, a, b, args.anchor_offset_a, args.anchor_offset_b)
                     else:
-                        z = compute_splash_latent(args.rows, args.cols, b, a, anchors)
+                        z = create_splash_canvas(args.rows, args.cols, b, a, anchors)
                     workq.append({
                             "z": z,
                             "x": x,
