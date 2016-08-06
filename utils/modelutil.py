@@ -18,6 +18,8 @@ from blocks.config import config
 from scipy.special import ndtri, ndtr
 from scipy.stats import norm
 
+from plat.interpolate import get_interpfn
+
 ### Load a model from disk
 def load_file(filename):
     with open(filename, "rb") as f:
@@ -185,7 +187,7 @@ def sample_random(model, numsamples):
     return samples
 
 def compute_splash(rows, cols, dim, space, anchors, spherical, gaussian):
-    lerpv = get_lerpv_by_type(spherical, gaussian)
+    lerpv = get_interpfn(spherical, gaussian)
 
     u_list = np.zeros((rows, cols, dim))
     # compute anchors
@@ -231,7 +233,7 @@ def cs(cols, x):
     print(scaledX, intX, nextX, spaceX, fracX)
 
 def compute_splash_latent(rows, cols, y, x, anchors, spherical=True, gaussian=False):
-    lerpv = get_lerpv_by_type(spherical, gaussian)
+    lerpv = get_interpfn(spherical, gaussian)
     x = np.clip(x, 0, 1)
     y = np.clip(y, 0, 1)
 
@@ -334,72 +336,8 @@ def compute_splash_old(rows, cols, dim):
 
     return u_gau
 
-def lerp(val, low, high):
-    return low + (high - low) * val
-
-# this is a placeholder for a future version of spherical interpolation. 
-# I think the right thing to do would be to convert to n-sphere spherical
-# coordinates and interpolate there.
-# https://en.wikipedia.org/wiki/N-sphere#Spherical_coordinates
-def lerp_circle(val, low, high):
-    # first compute the interpolated length
-    rad_low = np.linalg.norm(low)
-    rad_high = np.linalg.norm(high)
-    rad_cur = lerp(val, rad_low, rad_high)
-
-    # then compute the linearly interpolated vector but at unit length
-    lerp_vec = lerp(val, low, high)
-    rad_lerp_vec = np.linalg.norm(lerp_vec)
-    unit_vec = np.nan_to_num(lerp_vec / rad_lerp_vec)
-
-    # now just return the product of the length and direction
-    return rad_cur * unit_vec
-
-def lerp_gaussian(val, low, high):
-    low_gau = norm.cdf(low)
-    high_gau = norm.cdf(high)
-    lerped_gau = lerp(val, low_gau, high_gau)
-    return norm.ppf(lerped_gau)
-
-def lerp_circle_gaussian(val, low, high):
-    offset = norm.cdf(np.zeros_like(low))  # offset is just [0.5, 0.5, ...]
-    low_gau_shifted = norm.cdf(low) - offset
-    high_gau_shifted = norm.cdf(high) - offset
-    circle_lerped_gau = lerp_circle(val, low_gau_shifted, high_gau_shifted)
-    return norm.ppf(circle_lerped_gau + offset)
-
-# http://stackoverflow.com/a/2880012/1010653
-def slerp(val, low, high):
-    if val <= 0:
-        return low
-    elif val >= 1:
-        return high
-    omega = np.arccos(np.dot(low/np.linalg.norm(low), high/np.linalg.norm(high)))
-    so = np.sin(omega)
-    return np.sin((1.0-val)*omega) / so * low + np.sin(val*omega)/so * high
-
-def slerp_gaussian(val, low, high):
-    offset = norm.cdf(np.zeros_like(low))  # offset is just [0.5, 0.5, ...]
-    low_gau_shifted = norm.cdf(low) - offset
-    high_gau_shifted = norm.cdf(high) - offset
-    circle_lerped_gau = slerp(val, low_gau_shifted, high_gau_shifted)
-    epsilon = 0.001
-    clipped_sum = np.clip(circle_lerped_gau + offset, epsilon, 1.0 - epsilon)
-    result = norm.ppf(clipped_sum)
-    return result
-
-def get_lerpv_by_type(spherical, gaussian):
-    if spherical and gaussian:
-        return slerp_gaussian
-    elif spherical:
-        return slerp
-    elif gaussian:
-        return lerp_gaussian
-    else:
-        return lerp
-
 def compute_gradient(rows, cols, dim, analogy, anchors, spherical, gaussian):
-    lerpv = get_lerpv_by_type(spherical, gaussian)
+    lerpv = get_interpfn(spherical, gaussian)
     hyper = False
 
     numsamples = rows * cols
