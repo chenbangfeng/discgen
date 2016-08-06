@@ -12,7 +12,6 @@ from blocks.serialization import load
 from blocks.utils import shared_floatx
 from blocks.config import config
 from theano import tensor
-from utils.modelutil import make_flat
 import numpy as np
 import random
 import sys

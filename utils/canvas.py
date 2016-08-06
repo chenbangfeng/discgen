@@ -12,7 +12,7 @@ from blocks.serialization import load
 from blocks.utils import shared_floatx
 from blocks.config import config
 from theano import tensor
-from utils.modelutil import make_flat, compute_gradient, compute_splash, img_grid, compute_splash_latent
+from utils.modelutil import compute_splash_latent
 import numpy as np
 import random
 import sys

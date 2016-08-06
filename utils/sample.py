@@ -12,7 +12,6 @@ from blocks.serialization import load
 from blocks.utils import shared_floatx
 from blocks.config import config
 from theano import tensor
-from utils.modelutil import make_flat
 import numpy as np
 import random
 import sys
@@ -29,7 +28,7 @@ from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
 
-from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid
+from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid, create_fan_grid
 
 g_image_size = 128
 
@@ -60,9 +59,9 @@ def add_shoulders(images, anchor_images, rows, cols):
     return nimages, rows, ncols
 
 # returns list of latent variables to support rows x cols 
-def generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy):
-    if flat:
-        z = make_flat(z_dim, cols, rows)
+def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy):
+    if fan:
+        z = create_fan_grid(z_dim, cols, rows)
     elif gradient:
         z = create_gradient_grid(rows, cols, z_dim, analogy, anchors, spherical, gaussian)
     elif splash:
@@ -103,13 +102,6 @@ def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, sav
     img = grid2img(samples, rows, cols, not tight)
     img.save(save_path)
 
-
-def reconstruct_grid(model, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy, tight, shoulders, save_path):
-    selector = Selector(model.top_bricks)
-    decoder_mlp, = selector.select('/decoder_mlp').bricks
-    z_dim = decoder_mlp.input_dim
-    z = generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian, anchors, anchor_images, splash, spacing, analogy)
-    grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path)
 
 def surround_anchors(rows, cols, anchors, rand_anchors):
     newanchors = []
@@ -206,7 +198,7 @@ if __name__ == "__main__":
                         help="number of columns of samples to display")
     parser.add_argument("--save-path", type=str, default=None,
                         help="where to save the generated samples")
-    parser.add_argument('--flat', dest='flat', default=False, action='store_true')
+    parser.add_argument('--fan', dest='fan', default=False, action='store_true')
     parser.add_argument('--analogy', dest='analogy', default=False, action='store_true')
     parser.add_argument('--global-offset', dest='global_offset', default=None,
                         help="use json file as source of global offsets")
@@ -340,7 +332,7 @@ if __name__ == "__main__":
     if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
         srows=((args.rows // args.spacing) + 1)
         scols=((args.cols // args.spacing) + 1)
-        rand_anchors = generate_latent_grid(z_dim, rows=srows, cols=scols, flat=False, gradient=False,
+        rand_anchors = generate_latent_grid(z_dim, rows=srows, cols=scols, fan=False, gradient=False,
             spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, spacing=args.spacing, analogy=False)
         if args.partway is not None:
             l = len(rand_anchors)
@@ -350,11 +342,9 @@ if __name__ == "__main__":
             anchors = surround_anchors(srows, scols, anchors, rand_anchors)
         else:
             anchors = rand_anchors
-    z = generate_latent_grid(z_dim, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
+    z = generate_latent_grid(z_dim, args.rows, args.cols, args.fan, args.gradient, not args.linear, args.gaussian,
             anchors, anchor_images, args.splash, args.spacing, args.analogy)
     if global_offset is not None:
         z = z + global_offset
 
     grid_from_latents(z, model, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
-    # reconstruct_grid(model, args.rows, args.cols, args.flat, args.gradient, not args.linear, args.gaussian,
-    #     anchors, anchor_images, args.splash, args.spacing, args.analogy, args.tight, args.shoulders, args.save_path)

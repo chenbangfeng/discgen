@@ -7,7 +7,7 @@ import theano.tensor as T
 
 from blocks.extensions.saveload import Checkpoint
 
-from sample import generate_latent_grid, grid_from_latents, reconstruct_grid
+from sample import generate_latent_grid, grid_from_latents
 
 class SampleCheckpoint(Checkpoint):
     def __init__(self, z_dim, image_size, channels, save_subdir, **kwargs):
@@ -35,9 +35,6 @@ class SampleCheckpoint(Checkpoint):
         """Sample the model and save images to disk
         """
         grid_from_latents(self.z, self.main_loop.model, rows=self.rows, cols=self.cols, anchor_images=None, tight=False, shoulders=False, save_path=self.epoch_src)
-        # reconstruct_grid(self.main_loop.model, rows=7, cols=13, flat=False, gradient=False,
-        #     spherical=False, gaussian=False, anchors=False, anchor_images=None, splash=False,
-        #     spacing=3, analogy=False, tight=False, shoulders=False, save_path=self.epoch_src)
         if os.path.exists(self.epoch_src):
             epoch_dst = "{0}/epoch-{1:03d}.png".format(self.save_subdir, self.iteration)
             self.iteration = self.iteration + 1
