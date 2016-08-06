@@ -129,6 +129,18 @@ def create_gradient_grid(rows, cols, dim, analogy, anchors, spherical, gaussian)
 def create_fan_grid(z_dim, cols, rows, gaussian_prior=True, interleaves=0, shuffles=0):
     """This is a legacy grid layout"""
     sqrt2 = 1.0
+
+    def lerpIt(val, disp, low, high):
+        sumval = ((val + disp + sqrt2) / (2 * sqrt2)) % 2.0
+        if sumval < 0:
+            print("AHHH ERROR")
+            sumval = -sumval
+        if sumval < 1:
+            zeroToOne = sumval
+        else:
+            zeroToOne = 2.0 - sumval
+        return low + (high - low) * zeroToOne
+
     def lerpTo(val, low, high):
         zeroToOne = np.clip((val + sqrt2) / (2 * sqrt2), 0, 1)
         return low + (high - low) * zeroToOne
@@ -158,9 +170,12 @@ def create_fan_grid(z_dim, cols, rows, gaussian_prior=True, interleaves=0, shuff
         np.random.shuffle(offsets)
 
     offsets = []
+    displacements = []
     for i in range(z_dim):
         offsets.append(pol2cart(i * np.pi / z_dim))
+        displacements.append(1.0 * i / z_dim)
     offsets = np.array(offsets)
+    displacements = np.array(displacements)
 
     for i in range(interleaves):
         offsets = interleave(offsets)
@@ -180,8 +195,8 @@ def create_fan_grid(z_dim, cols, rows, gaussian_prior=True, interleaves=0, shuff
             # yf = lerp(c / (cols-1.0), -1.0, 1.0)
             yf = (c - (cols / 2.0) + 0.5) / ((cols-1) / 2.0 + 0.5)
             coords = map(lambda o: np.dot([xf, yf], o), offsets)
-            ranged = map(lambda n:lerpTo(n, range_low, range_high), coords)
-            # ranged = map(lambda n:lerpTo(n, range_low, range_high), [xf, yf])
+            ranged = map(lambda n, d:lerpIt(n, d, range_low, range_high), coords, displacements)
+            # ranged = map(lambda n:lerpTo(n, range_low, range_high), coords)
             if(gaussian_prior):
                 cdfed = map(ndtri, ranged)
             else:
