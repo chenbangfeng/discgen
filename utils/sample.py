@@ -12,7 +12,7 @@ from blocks.serialization import load
 from blocks.utils import shared_floatx
 from blocks.config import config
 from theano import tensor
-from utils.modelutil import make_flat, compute_gradient, compute_splash, img_grid
+from utils.modelutil import make_flat
 import numpy as np
 import random
 import sys
@@ -28,6 +28,8 @@ from fuel.transformers.defaults import uint8_pixels_to_floatX
 from fuel.schemes import SequentialExampleScheme
 from fuel.streams import DataStream
 from discgen.utils import Colorize
+
+from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid
 
 g_image_size = 128
 
@@ -62,9 +64,9 @@ def generate_latent_grid(z_dim, rows, cols, flat, gradient, spherical, gaussian,
     if flat:
         z = make_flat(z_dim, cols, rows)
     elif gradient:
-        z = compute_gradient(rows, cols, z_dim, analogy, anchors, spherical, gaussian)
+        z = create_gradient_grid(rows, cols, z_dim, analogy, anchors, spherical, gaussian)
     elif splash:
-        z = compute_splash(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
+        z = create_splash_grid(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
     else:
         # TODO: non-gaussian version
         z = np.random.normal(loc=0, scale=1, size=(rows * cols, z_dim))
@@ -98,7 +100,7 @@ def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, sav
         samples, rows, cols = add_shoulders(samples, anchor_images, rows, cols)
 
     print('Preparing image grid...')
-    img = img_grid(samples, rows, cols, not tight)
+    img = grid2img(samples, rows, cols, not tight)
     img.save(save_path)
 
 
@@ -297,7 +299,7 @@ if __name__ == "__main__":
 
     if args.passthrough:
         print('Preparing image grid...')
-        img = img_grid(anchor_images, args.rows, args.cols, not args.tight)
+        img = grid2img(anchor_images, args.rows, args.cols, not args.tight)
         img.save(args.save_path)
         sys.exit(0)
 

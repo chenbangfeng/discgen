@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import norm
 
 def lerp(val, low, high):
     """Linear interpolation"""
