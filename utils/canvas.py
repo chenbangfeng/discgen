@@ -176,6 +176,20 @@ def apply_anchor_offsets(anchor, offsets, a, b, a_indices_str, b_indices_str):
     # print(a, a*a_offset)
     return new_anchor
 
+def make_mask_layout(height, width, radius):
+    I = np.zeros((height, width)).astype(np.uint8)
+    center = np.array([width/2.0, height/2.0])
+    for y in range(height):
+        for x in range(width):
+            x_off = 0.5
+            if y%2 == 0:
+                x_off = 1.0
+            pos = np.array([x+x_off, y+0.5])
+            length = np.linalg.norm(pos - center)
+            if length < radius:
+                I[y][x] = 255
+    return I
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model", dest='model', type=str, default=None,
@@ -211,7 +225,13 @@ if __name__ == "__main__":
     parser.add_argument('--mask-name', dest='mask_name', default="rounded",
                         help="prefix name for alpha mask to use (full/rounded/hex")
     parser.add_argument('--mask-layout', dest='mask_layout', default=None,
-                        help="use image as source of splash grid points")    
+                        help="use image as source of splash grid points")
+    parser.add_argument('--mask-width', dest='mask_width', type=int, default=15,
+                        help="width for computed mask")
+    parser.add_argument('--mask-height', dest='mask_height', type=int, default=15,
+                        help="height for computed mask")
+    parser.add_argument('--mask-radius', dest='mask_radius', default=None, type=float,
+                        help="radius for computed mask")
     parser.add_argument('--layout', dest='layout', default=None,
                         help="layout json file")
     parser.add_argument('--batch-size', dest='batch_size', type=int, default=100,
@@ -287,14 +307,18 @@ if __name__ == "__main__":
                         "y": y
                     })
 
-    elif args.mask_layout:
-        rawim = imread(args.mask_layout);
-        if len(rawim.shape) == 2:
-            im_height, im_width = rawim.shape
-            mask_layout = rawim
+    elif args.mask_layout or args.mask_radius:
+        if args.mask_layout:
+            rawim = imread(args.mask_layout);
+            if len(rawim.shape) == 2:
+                im_height, im_width = rawim.shape
+                mask_layout = rawim
+            else:
+                im_height, im_width, _ = rawim.shape
+                mask_layout = rawim[:,:,0]
         else:
-            im_height, im_width, _ = rawim.shape
-            mask_layout = rawim[:,:,0]
+            im_height, im_width = args.mask_height, args.mask_width
+            mask_layout = make_mask_layout(im_height, im_width, args.mask_radius)
         for xpos in range(im_width):
             for ypos in range(im_height):
                 a = float(xpos) / (im_width - 1)
