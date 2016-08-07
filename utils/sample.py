@@ -30,6 +30,7 @@ from discgen.utils import Colorize
 
 from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid, create_chain_grid, create_fan_grid
 
+import importlib
 g_image_size = 128
 
 # returns new version of images, rows, cols
@@ -74,28 +75,8 @@ def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, 
 
     return z
 
-def samples_from_latents(z, model):
-    selector = Selector(model.top_bricks)
-    decoder_mlp, = selector.select('/decoder_mlp').bricks
-    decoder_convnet, = selector.select('/decoder_convnet').bricks
-
-    print('Building computation graph...')
-    sz = shared_floatx(z)
-    mu_theta = decoder_convnet.apply(
-        decoder_mlp.apply(sz).reshape(
-            (-1,) + decoder_convnet.get_dim('input_')))
-    computation_graph = ComputationGraph([mu_theta])
-
-    print('Compiling sampling function...')
-    sampling_function = theano.function(
-        computation_graph.inputs, computation_graph.outputs[0])
-
-    print('Sampling...')
-    samples = sampling_function()
-    return samples
-
-def grid_from_latents(z, model, rows, cols, anchor_images, tight, shoulders, save_path):
-    samples = samples_from_latents(z, model)
+def grid_from_latents(z, dmodel, rows, cols, anchor_images, tight, shoulders, save_path):
+    samples = dmodel.sample_at(z)
 
     if shoulders:
         samples, rows, cols = add_shoulders(samples, anchor_images, rows, cols)
@@ -190,8 +171,12 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
     print("JSON#]")
     print("VECTOR OUTPUT END")
 
-if __name__ == "__main__":
+def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
+    parser.add_argument("--model-module", dest='model_module', type=str,
+                        default="utils.sample", help="module encapsulating model")
+    parser.add_argument("--model-class", dest='model_class', type=str,
+                        default="DiscGenModel", help="class encapsulating model")
     parser.add_argument("--model", dest='model', type=str, default=None,
                         help="path to the saved model")
     parser.add_argument("--rows", type=int, default=5,
@@ -268,7 +253,7 @@ if __name__ == "__main__":
                         help="Ouput dataset as encoded vectors")
     parser.add_argument("--image-size", dest='image_size', type=int, default=64,
                         help="size of (offset) images")
-    args = parser.parse_args()
+    args = parser.parse_args(cliargs)
 
     if args.seed:
         np.random.seed(args.seed)
@@ -299,10 +284,13 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print('Loading saved model...')
-    model = Model(load(args.model).algorithm.cost)
+    ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
+    dmodel = ModelClass(args.model)
+
+    # dmodel = DiscGenModel(args.model)
 
     if anchor_images is not None:
-        anchors = get_image_vectors(model, anchor_images)
+        anchors = dmodel.encode_images(anchor_images)
     elif args.anchor_vectors is not None:
         anchors = get_json_vectors(args.anchor_vectors)
     else:
@@ -315,7 +303,7 @@ if __name__ == "__main__":
         if anchors is not None:
             output_vectors(anchors)
         else:
-            stream_output_vectors(model, args.dataset, args.split)
+            stream_output_vectors(dmodel.model, args.dataset, args.split)
         sys.exit(0)
 
     global_offset = None
@@ -329,9 +317,7 @@ if __name__ == "__main__":
         offsets = get_json_vectors(args.global_offset)
         global_offset =  get_global_offset(offsets, args.global_indices, args.global_scale)
 
-    selector = Selector(model.top_bricks)
-    decoder_mlp, = selector.select('/decoder_mlp').bricks
-    z_dim = decoder_mlp.input_dim
+    z_dim = dmodel.get_zdim()
     # I don't remember what partway/encircle do so they are not handling the chain layout
     if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
         srows=((args.rows // args.spacing) + 1)
@@ -351,4 +337,43 @@ if __name__ == "__main__":
     if global_offset is not None:
         z = z + global_offset
 
-    grid_from_latents(z, model, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
+    grid_from_latents(z, dmodel, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
+
+class DiscGenModel:
+    def __init__(self, filename):
+        self.model = Model(load(filename).algorithm.cost)
+
+    def encode_images(self, images):
+        encoder_function = get_image_encoder_function(self.model)
+        print('Encoding...')
+        examples, latents = encoder_function(images)
+        return latents
+
+    def get_zdim(self):
+        selector = Selector(self.model.top_bricks)
+        decoder_mlp, = selector.select('/decoder_mlp').bricks
+        return decoder_mlp.input_dim
+
+    def sample_at(self, z):
+        print("SA: ", z.shape)
+        selector = Selector(self.model.top_bricks)
+        decoder_mlp, = selector.select('/decoder_mlp').bricks
+        decoder_convnet, = selector.select('/decoder_convnet').bricks
+
+        print('Building computation graph...')
+        sz = shared_floatx(z)
+        mu_theta = decoder_convnet.apply(
+            decoder_mlp.apply(sz).reshape(
+                (-1,) + decoder_convnet.get_dim('input_')))
+        computation_graph = ComputationGraph([mu_theta])
+
+        print('Compiling sampling function...')
+        sampling_function = theano.function(
+            computation_graph.inputs, computation_graph.outputs[0])
+
+        print('Sampling...')
+        samples = sampling_function()
+        return samples
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
