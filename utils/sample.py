@@ -3,15 +3,6 @@
 """Plots model samples."""
 import argparse
 
-import theano
-from blocks.bricks import Random
-from blocks.graph import ComputationGraph
-from blocks.model import Model
-from blocks.select import Selector
-from blocks.serialization import load
-from blocks.utils import shared_floatx
-from blocks.config import config
-from theano import tensor
 import numpy as np
 import random
 import sys
@@ -174,7 +165,7 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
 def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model-module", dest='model_module', type=str,
-                        default="utils.sample", help="module encapsulating model")
+                        default="utils.interface", help="module encapsulating model")
     parser.add_argument("--model-class", dest='model_class', type=str,
                         default="DiscGenModel", help="class encapsulating model")
     parser.add_argument("--model", dest='model', type=str, default=None,
@@ -285,7 +276,7 @@ def main(cliargs):
 
     print('Loading saved model...')
     ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
-    dmodel = ModelClass(args.model)
+    dmodel = ModelClass(filename=args.model)
 
     # dmodel = DiscGenModel(args.model)
 
@@ -338,42 +329,6 @@ def main(cliargs):
         z = z + global_offset
 
     grid_from_latents(z, dmodel, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
-
-class DiscGenModel:
-    def __init__(self, filename):
-        self.model = Model(load(filename).algorithm.cost)
-
-    def encode_images(self, images):
-        encoder_function = get_image_encoder_function(self.model)
-        print('Encoding...')
-        examples, latents = encoder_function(images)
-        return latents
-
-    def get_zdim(self):
-        selector = Selector(self.model.top_bricks)
-        decoder_mlp, = selector.select('/decoder_mlp').bricks
-        return decoder_mlp.input_dim
-
-    def sample_at(self, z):
-        print("SA: ", z.shape)
-        selector = Selector(self.model.top_bricks)
-        decoder_mlp, = selector.select('/decoder_mlp').bricks
-        decoder_convnet, = selector.select('/decoder_convnet').bricks
-
-        print('Building computation graph...')
-        sz = shared_floatx(z)
-        mu_theta = decoder_convnet.apply(
-            decoder_mlp.apply(sz).reshape(
-                (-1,) + decoder_convnet.get_dim('input_')))
-        computation_graph = ComputationGraph([mu_theta])
-
-        print('Compiling sampling function...')
-        sampling_function = theano.function(
-            computation_graph.inputs, computation_graph.outputs[0])
-
-        print('Sampling...')
-        samples = sampling_function()
-        return samples
 
 if __name__ == '__main__':
     main(sys.argv[1:])
