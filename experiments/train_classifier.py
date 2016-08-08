@@ -23,53 +23,135 @@ from theano import tensor
 
 from discgen.utils import create_custom_streams
 
-g_image_size = 256
-
-def create_model_bricks():
-    convnet = ConvolutionalSequence(
-        layers=[
+def create_model_bricks(image_size, depth):
+    encoder_layers = []
+    if depth > 0:
+        encoder_layers = encoder_layers + [
             Convolutional(
-                filter_size=(4, 4),
+                filter_size=(3, 3),
+                border_mode=(1, 1),
                 num_filters=32,
                 name='conv1'),
             SpatialBatchNormalization(name='batch_norm1'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                step=(2, 2),
+                border_mode=(1, 1),
                 num_filters=32,
                 name='conv2'),
             SpatialBatchNormalization(name='batch_norm2'),
             Rectifier(),
             Convolutional(
-                filter_size=(4, 4),
-                num_filters=64,
+                filter_size=(2, 2),
+                step=(2, 2),
+                num_filters=32,
                 name='conv3'),
             SpatialBatchNormalization(name='batch_norm3'),
-            Rectifier(),
+            Rectifier()
+        ]
+    if depth > 1:
+        encoder_layers = encoder_layers + [
             Convolutional(
                 filter_size=(3, 3),
-                step=(2, 2),
+                border_mode=(1, 1),
                 num_filters=64,
                 name='conv4'),
             SpatialBatchNormalization(name='batch_norm4'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                num_filters=128,
+                border_mode=(1, 1),
+                num_filters=64,
                 name='conv5'),
             SpatialBatchNormalization(name='batch_norm5'),
             Rectifier(),
             Convolutional(
-                filter_size=(3, 3),
+                filter_size=(2, 2),
                 step=(2, 2),
-                num_filters=128,
+                num_filters=64,
                 name='conv6'),
             SpatialBatchNormalization(name='batch_norm6'),
+            Rectifier()
+        ]
+    if depth > 2:
+        encoder_layers = encoder_layers + [
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=128,
+                name='conv7'),
+            SpatialBatchNormalization(name='batch_norm7'),
             Rectifier(),
-        ],
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=128,
+                name='conv8'),
+            SpatialBatchNormalization(name='batch_norm8'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(2, 2),
+                step=(2, 2),
+                num_filters=128,
+                name='conv9'),
+            SpatialBatchNormalization(name='batch_norm9'),
+            Rectifier()
+        ]
+    if depth > 3:
+        encoder_layers = encoder_layers + [
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=256,
+                name='conv10'),
+            SpatialBatchNormalization(name='batch_norm10'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=256,
+                name='conv11'),
+            SpatialBatchNormalization(name='batch_norm11'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(2, 2),
+                step=(2, 2),
+                num_filters=256,
+                name='conv12'),
+            SpatialBatchNormalization(name='batch_norm12'),
+            Rectifier(),
+        ]
+    if depth > 4:
+        encoder_layers = encoder_layers + [
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=512,
+                name='conv13'),
+            SpatialBatchNormalization(name='batch_norm13'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                border_mode=(1, 1),
+                num_filters=512,
+                name='conv14'),
+            SpatialBatchNormalization(name='batch_norm14'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(2, 2),
+                step=(2, 2),
+                num_filters=512,
+                name='conv15'),
+            SpatialBatchNormalization(name='batch_norm15'),
+            Rectifier()
+        ]
+
+    print("creating model of depth {} with {} layers".format(depth, len(encoder_layers)))
+
+    convnet = ConvolutionalSequence(
+        layers=encoder_layers,
         num_channels=3,
-        image_size=(g_image_size, g_image_size),
+        image_size=(image_size, image_size),
         use_bias=False,
         weights_init=IsotropicGaussian(0.033),
         biases_init=Constant(0),
@@ -84,14 +166,14 @@ def create_model_bricks():
         name='mlp')
     mlp.initialize()
 
-    return convnet, mlp
+    return convnet, mlp, len(encoder_layers)
 
 
-def create_training_computation_graphs():
+def create_training_computation_graphs(image_size, net_depth):
     x = tensor.tensor4('features')
     y = tensor.imatrix('targets')
 
-    convnet, mlp = create_model_bricks()
+    convnet, mlp, num_conv_layers = create_model_bricks(image_size=image_size, depth=net_depth)
     y_hat = mlp.apply(convnet.apply(x).flatten(ndim=2))
     cost = BinaryCrossEntropy().apply(y, y_hat)
     accuracy = 1 - tensor.neq(y > 0.5, y_hat > 0.5).mean()
@@ -100,7 +182,9 @@ def create_training_computation_graphs():
     # Create a graph which uses batch statistics for batch normalization
     # as well as dropout on selected variables
     bn_cg = apply_batch_normalization(cg)
-    bricks_to_drop = ([convnet.layers[i] for i in (5, 11, 17)] +
+    drop_layers = range(5, num_conv_layers, 6)
+    print("Applying drop to layers: {}".format(drop_layers))
+    bricks_to_drop = ([convnet.layers[i] for i in drop_layers] +
                       [mlp.application_methods[1].brick])
     variables_to_drop = VariableFilter(
         roles=[OUTPUT], bricks=bricks_to_drop)(bn_cg.variables)
@@ -110,7 +194,7 @@ def create_training_computation_graphs():
 
 
 def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
-        dataset, color_convert, allowed, stretch):
+        dataset, color_convert, image_size, net_depth, allowed, stretch):
 
     streams = create_custom_streams(filename=dataset,
                                     training_batch_size=batch_size,
@@ -124,7 +208,7 @@ def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
     train_monitor_stream = streams[1]
     valid_monitor_stream = streams[2]
 
-    cg, bn_dropout_cg = create_training_computation_graphs()
+    cg, bn_dropout_cg = create_training_computation_graphs(image_size, net_depth)
 
     model = Model(bn_dropout_cg.outputs[0])
 
@@ -170,10 +254,11 @@ def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
 
     if oldmodel is not None:
         print("Initializing parameters with old model {}".format(oldmodel))
-        saved_model = load(oldmodel)
-        main_loop.model.set_parameter_values(
-            saved_model.model.get_parameter_values())
-        del saved_model
+        with open(oldmodel, 'rb') as src:
+            saved_model = load(src)
+            main_loop.model.set_parameter_values(
+                saved_model.model.get_parameter_values())
+            del saved_model
 
     main_loop.run()
 
@@ -202,13 +287,17 @@ if __name__ == "__main__":
                         default=False, action='store_true',
                         help="Convert source dataset to color from grayscale.")
     parser.add_argument("--oldmodel", type=str, default=None,
-                        help="Use a model file created by a previous \
-                        run as a starting point for parameters")
+                        help="Load old model as starting point")
+    parser.add_argument("--image-size", dest='image_size', type=int, default=64,
+                        help="size of (offset) images")
+    parser.add_argument("--net-depth", dest='net_depth', type=int, default=4,
+                        help="network depth from 1-5")
 
     args = parser.parse_args()
     allowed = None
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
     run(args.batch_size, args.classifier, args.oldmodel, args.monitor_every,
-        args.checkpoint_every, args.dataset, args.color_convert, allowed,
-        args.stretch)
+        args.checkpoint_every, args.dataset, args.color_convert,
+        args.image_size, args.net_depth,
+        allowed, args.stretch)
