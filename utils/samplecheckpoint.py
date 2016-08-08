@@ -12,8 +12,9 @@ from sample_utils import get_anchor_images, get_image_vectors
 from plat.grid_layout import create_chain_grid
 
 class SampleCheckpoint(Checkpoint):
-    def __init__(self, z_dim, image_size, channels, dataset, split, save_subdir, **kwargs):
+    def __init__(self, interface, z_dim, image_size, channels, dataset, split, save_subdir, **kwargs):
         super(SampleCheckpoint, self).__init__(path=None, **kwargs)
+        self.interface = interface
         self.image_size = image_size
         self.channels = channels
         self.save_subdir = save_subdir
@@ -31,10 +32,10 @@ class SampleCheckpoint(Checkpoint):
     def do(self, callback_name, *args):
         """Sample the model and save images to disk
         """
-        model = self.main_loop.model
-        anchors = get_image_vectors(model, self.anchor_images)
+        dmodel = self.interface(model=self.main_loop.model)
+        anchors = dmodel.encode_images(self.anchor_images)
         z = create_chain_grid(self.rows, self.cols, self.z_dim, self.spacing, anchors=anchors, spherical=True, gaussian=False)
-        grid_from_latents(z, model, rows=self.rows, cols=self.cols, anchor_images=None, tight=False, shoulders=False, save_path=self.epoch_src)
+        grid_from_latents(z, dmodel, rows=self.rows, cols=self.cols, anchor_images=None, tight=False, shoulders=False, save_path=self.epoch_src)
         if os.path.exists(self.epoch_src):
             epoch_dst = "{0}/epoch-{1:03d}.png".format(self.save_subdir, self.iteration)
             self.iteration = self.iteration + 1
