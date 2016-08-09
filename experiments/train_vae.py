@@ -346,7 +346,7 @@ def create_model_bricks(z_dim, image_size, depth):
 
 
 def create_training_computation_graphs(z_dim, image_size, net_depth, discriminative_regularization,
-                                       classifer, reconstruction_factor,
+                                       classifer, vintage, reconstruction_factor,
                                        kl_factor, discriminative_factor, disc_weights):
     x = tensor.tensor4('features')
     pi = numpy.cast[theano.config.floatX](numpy.pi)
@@ -354,7 +354,11 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
     bricks = create_model_bricks(z_dim=z_dim, image_size=image_size, depth=net_depth)
     encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp = bricks
     if discriminative_regularization:
-        classifier_model = Model(load(classifer).algorithm.cost)
+        if vintage:
+            classifier_model = Model(load(classifer).algorithm.cost)
+        else:
+            with open(classifer, 'rb') as src:
+                classifier_model = Model(load(src).algorithm.cost)
         selector = Selector(classifier_model.top_bricks)
         classifier_convnet, = selector.select('/convnet').bricks
         classifier_mlp, = selector.select('/mlp').bricks
@@ -449,7 +453,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
 
 
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
-        classifier, monitor_every, checkpoint_every, dataset, color_convert,
+        classifier, vintage, monitor_every, checkpoint_every, dataset, color_convert,
         image_size, net_depth, subdir,
         reconstruction_factor, kl_factor, discriminative_factor, disc_weights):
 
@@ -470,7 +474,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     # statistics. They are updated following an exponential moving average.
     rval = create_training_computation_graphs(
                 z_dim, image_size, net_depth, discriminative_regularization, classifier,
-                reconstruction_factor, kl_factor, discriminative_factor, disc_weights)
+                vintage, reconstruction_factor, kl_factor, discriminative_factor, disc_weights)
     cg, bn_cg, variance_parameters = rval
 
     pop_updates = list(
@@ -550,6 +554,9 @@ if __name__ == "__main__":
                         help="apply discriminative regularization")
     parser.add_argument('--classifier', dest='classifier', type=str,
                         default="celeba_classifier.zip")
+    parser.add_argument('--vintage', dest='vintage',
+                        default=False, action='store_true',
+                        help="Are you running a vintage version of blocks?")
     parser.add_argument('--model', dest='model', type=str,
                         default="celeba_vae_regularization.zip")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
@@ -589,7 +596,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     disc_weights = map(float, args.discriminative_layer_weights.split(","))
     run(args.batch_size, args.model, args.z_dim, args.oldmodel,
-        args.regularize, args.classifier, args.monitor_every,
+        args.regularize, args.classifier, args.vintage, args.monitor_every,
         args.checkpoint_every, args.dataset, args.color_convert,
         args.image_size, args.net_depth, args.subdir,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor, disc_weights)
