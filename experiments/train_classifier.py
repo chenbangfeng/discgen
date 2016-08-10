@@ -24,6 +24,7 @@ from theano import tensor
 from discgen.utils import create_custom_streams
 
 def create_model_bricks(image_size, depth):
+    # original celebA64 was depth=3 (went to bach_norm6)
     layers = []
     if(depth > 0):
         layers = layers + [
@@ -40,15 +41,15 @@ def create_model_bricks(image_size, depth):
                 name='conv2'),
             SpatialBatchNormalization(name='batch_norm2'),
             Rectifier(),
-            Convolutional(
-                filter_size=(4, 4),
-                num_filters=32,
-                name='conv3'),
-            SpatialBatchNormalization(name='batch_norm3'),
-            Rectifier()
         ]
     if(depth > 1):
         layers = layers + [
+            Convolutional(
+                filter_size=(4, 4),
+                num_filters=64,
+                name='conv3'),
+            SpatialBatchNormalization(name='batch_norm3'),
+            Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
                 step=(2, 2),
@@ -56,88 +57,102 @@ def create_model_bricks(image_size, depth):
                 name='conv4'),
             SpatialBatchNormalization(name='batch_norm4'),
             Rectifier(),
+        ]
+    if(depth > 2):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                num_filters=64,
+                num_filters=128,
                 name='conv5'),
             SpatialBatchNormalization(name='batch_norm5'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
                 step=(2, 2),
-                num_filters=64,
+                num_filters=128,
                 name='conv6'),
             SpatialBatchNormalization(name='batch_norm6'),
-            Rectifier()
-        ]
-    if(depth > 2):
-        layers = layers + [
-            Convolutional(
-                filter_size=(3, 3),
-                step=(2, 2),
-                num_filters=128,
-                name='conv7'),
-            SpatialBatchNormalization(name='batch_norm7'),
             Rectifier(),
-            Convolutional(
-                filter_size=(3, 3),
-                num_filters=128,
-                name='conv8'),
-            SpatialBatchNormalization(name='batch_norm8'),
-            Rectifier(),
-            Convolutional(
-                filter_size=(2, 2),
-                step=(2, 2),
-                num_filters=128,
-                name='conv9'),
-            SpatialBatchNormalization(name='batch_norm9'),
-            Rectifier()
         ]
     if(depth > 3):
         layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                step=(2, 2),
                 num_filters=256,
-                name='conv10'),
-            SpatialBatchNormalization(name='batch_norm10'),
+                name='conv7'),
+            SpatialBatchNormalization(name='batch_norm7'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                num_filters=256,
-                name='conv11'),
-            SpatialBatchNormalization(name='batch_norm11'),
-            Rectifier(),
-            Convolutional(
-                filter_size=(2, 2),
                 step=(2, 2),
                 num_filters=256,
-                name='conv12'),
-            SpatialBatchNormalization(name='batch_norm12'),
-            Rectifier()
+                name='conv8'),
+            SpatialBatchNormalization(name='batch_norm8'),
+            Rectifier(),
         ]
     if(depth > 4):
         layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
+                num_filters=512,
+                name='conv9'),
+            SpatialBatchNormalization(name='batch_norm9'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
                 step=(2, 2),
-                num_filters=256,
+                num_filters=512,
+                name='conv10'),
+            SpatialBatchNormalization(name='batch_norm10'),
+            Rectifier(),
+        ]
+    if(depth > 5):
+        layers = layers + [
+            Convolutional(
+                filter_size=(4, 4),
+                num_filters=512,
+                name='conv11'),
+            SpatialBatchNormalization(name='batch_norm11'),
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                step=(2, 2),
+                num_filters=512,
+                name='conv12'),
+            SpatialBatchNormalization(name='batch_norm12'),
+            Rectifier(),
+        ]
+    if(depth > 6):
+        layers = layers + [
+            Convolutional(
+                filter_size=(4, 4),
+                num_filters=512,
                 name='conv13'),
             SpatialBatchNormalization(name='batch_norm13'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                num_filters=256,
+                step=(2, 2),
+                num_filters=512,
                 name='conv14'),
             SpatialBatchNormalization(name='batch_norm14'),
             Rectifier(),
+        ]
+    if(depth > 7):
+        layers = layers + [
             Convolutional(
-                filter_size=(2, 2),
-                step=(2, 2),
-                num_filters=256,
+                filter_size=(4, 4),
+                num_filters=512,
                 name='conv15'),
             SpatialBatchNormalization(name='batch_norm15'),
-            Rectifier()
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                step=(2, 2),
+                num_filters=512,
+                name='conv16'),
+            SpatialBatchNormalization(name='batch_norm16'),
+            Rectifier(),
         ]
 
     print("creating model of depth {} with {} layers".format(depth, len(layers)))
