@@ -81,7 +81,7 @@ def create_model_bricks(image_size, depth):
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                num_filters=256,
+                num_filters=128,
                 name='conv8'),
             SpatialBatchNormalization(name='batch_norm8'),
             Rectifier(),
@@ -160,14 +160,14 @@ def create_model_bricks(image_size, depth):
         name='mlp')
     mlp.initialize()
 
-    return convnet, mlp
+    return convnet, mlp, len(layers)
 
 
 def create_training_computation_graphs(image_size, net_depth):
     x = tensor.tensor4('features')
     y = tensor.imatrix('targets')
 
-    convnet, mlp = create_model_bricks(image_size=image_size, depth=net_depth)
+    convnet, mlp, num_conv_layers = create_model_bricks(image_size=image_size, depth=net_depth)
     y_hat = mlp.apply(convnet.apply(x).flatten(ndim=2))
     cost = BinaryCrossEntropy().apply(y, y_hat)
     accuracy = 1 - tensor.neq(y > 0.5, y_hat > 0.5).mean()
@@ -176,7 +176,9 @@ def create_training_computation_graphs(image_size, net_depth):
     # Create a graph which uses batch statistics for batch normalization
     # as well as dropout on selected variables
     bn_cg = apply_batch_normalization(cg)
-    bricks_to_drop = ([convnet.layers[i] for i in (5, 11, 17)] +
+    drop_layers = range(5, num_conv_layers, 6)
+    print("Applying drop to layers: {}".format(drop_layers))
+    bricks_to_drop = ([convnet.layers[i] for i in drop_layers] +
                       [mlp.application_methods[1].brick])
     variables_to_drop = VariableFilter(
         roles=[OUTPUT], bricks=bricks_to_drop)(bn_cg.variables)
@@ -246,10 +248,11 @@ def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
 
     if oldmodel is not None:
         print("Initializing parameters with old model {}".format(oldmodel))
-        saved_model = load(oldmodel)
-        main_loop.model.set_parameter_values(
-            saved_model.model.get_parameter_values())
-        del saved_model
+        with open(oldmodel, 'rb') as src:
+            saved_model = load(src)
+            main_loop.model.set_parameter_values(
+                saved_model.model.get_parameter_values())
+            del saved_model
 
     main_loop.run()
 
