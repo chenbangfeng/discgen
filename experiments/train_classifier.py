@@ -24,68 +24,64 @@ from theano import tensor
 from discgen.utils import create_custom_streams
 
 def create_model_bricks(image_size, depth):
-    encoder_layers = []
-    if depth > 0:
-        encoder_layers = encoder_layers + [
+    layers = []
+    if(depth > 0):
+        layers = layers + [
             Convolutional(
-                filter_size=(3, 3),
-                border_mode=(1, 1),
+                filter_size=(4, 4),
                 num_filters=32,
                 name='conv1'),
             SpatialBatchNormalization(name='batch_norm1'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=32,
                 name='conv2'),
             SpatialBatchNormalization(name='batch_norm2'),
             Rectifier(),
             Convolutional(
-                filter_size=(2, 2),
-                step=(2, 2),
+                filter_size=(4, 4),
                 num_filters=32,
                 name='conv3'),
             SpatialBatchNormalization(name='batch_norm3'),
             Rectifier()
         ]
-    if depth > 1:
-        encoder_layers = encoder_layers + [
+    if(depth > 1):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=64,
                 name='conv4'),
             SpatialBatchNormalization(name='batch_norm4'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
                 num_filters=64,
                 name='conv5'),
             SpatialBatchNormalization(name='batch_norm5'),
             Rectifier(),
             Convolutional(
-                filter_size=(2, 2),
+                filter_size=(3, 3),
                 step=(2, 2),
                 num_filters=64,
                 name='conv6'),
             SpatialBatchNormalization(name='batch_norm6'),
             Rectifier()
         ]
-    if depth > 2:
-        encoder_layers = encoder_layers + [
+    if(depth > 2):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=128,
                 name='conv7'),
             SpatialBatchNormalization(name='batch_norm7'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=128,
+                num_filters=256,
                 name='conv8'),
             SpatialBatchNormalization(name='batch_norm8'),
             Rectifier(),
@@ -97,18 +93,17 @@ def create_model_bricks(image_size, depth):
             SpatialBatchNormalization(name='batch_norm9'),
             Rectifier()
         ]
-    if depth > 3:
-        encoder_layers = encoder_layers + [
+    if(depth > 3):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=256,
                 name='conv10'),
             SpatialBatchNormalization(name='batch_norm10'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
                 num_filters=256,
                 name='conv11'),
             SpatialBatchNormalization(name='batch_norm11'),
@@ -119,37 +114,36 @@ def create_model_bricks(image_size, depth):
                 num_filters=256,
                 name='conv12'),
             SpatialBatchNormalization(name='batch_norm12'),
-            Rectifier(),
+            Rectifier()
         ]
-    if depth > 4:
-        encoder_layers = encoder_layers + [
+    if(depth > 4):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=512,
+                step=(2, 2),
+                num_filters=256,
                 name='conv13'),
             SpatialBatchNormalization(name='batch_norm13'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=512,
+                num_filters=256,
                 name='conv14'),
             SpatialBatchNormalization(name='batch_norm14'),
             Rectifier(),
             Convolutional(
                 filter_size=(2, 2),
                 step=(2, 2),
-                num_filters=512,
+                num_filters=256,
                 name='conv15'),
             SpatialBatchNormalization(name='batch_norm15'),
             Rectifier()
         ]
 
-    print("creating model of depth {} with {} layers".format(depth, len(encoder_layers)))
+    print("creating model of depth {} with {} layers".format(depth, len(layers)))
 
     convnet = ConvolutionalSequence(
-        layers=encoder_layers,
+        layers=layers,
         num_channels=3,
         image_size=(image_size, image_size),
         use_bias=False,
@@ -166,14 +160,14 @@ def create_model_bricks(image_size, depth):
         name='mlp')
     mlp.initialize()
 
-    return convnet, mlp, len(encoder_layers)
+    return convnet, mlp
 
 
 def create_training_computation_graphs(image_size, net_depth):
     x = tensor.tensor4('features')
     y = tensor.imatrix('targets')
 
-    convnet, mlp, num_conv_layers = create_model_bricks(image_size=image_size, depth=net_depth)
+    convnet, mlp = create_model_bricks(image_size=image_size, depth=net_depth)
     y_hat = mlp.apply(convnet.apply(x).flatten(ndim=2))
     cost = BinaryCrossEntropy().apply(y, y_hat)
     accuracy = 1 - tensor.neq(y > 0.5, y_hat > 0.5).mean()
@@ -182,9 +176,7 @@ def create_training_computation_graphs(image_size, net_depth):
     # Create a graph which uses batch statistics for batch normalization
     # as well as dropout on selected variables
     bn_cg = apply_batch_normalization(cg)
-    drop_layers = range(5, num_conv_layers, 6)
-    print("Applying drop to layers: {}".format(drop_layers))
-    bricks_to_drop = ([convnet.layers[i] for i in drop_layers] +
+    bricks_to_drop = ([convnet.layers[i] for i in (5, 11, 17)] +
                       [mlp.application_methods[1].brick])
     variables_to_drop = VariableFilter(
         roles=[OUTPUT], bricks=bricks_to_drop)(bn_cg.variables)
@@ -254,11 +246,10 @@ def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
 
     if oldmodel is not None:
         print("Initializing parameters with old model {}".format(oldmodel))
-        with open(oldmodel, 'rb') as src:
-            saved_model = load(src)
-            main_loop.model.set_parameter_values(
-                saved_model.model.get_parameter_values())
-            del saved_model
+        saved_model = load(oldmodel)
+        main_loop.model.set_parameter_values(
+            saved_model.model.get_parameter_values())
+        del saved_model
 
     main_loop.run()
 
