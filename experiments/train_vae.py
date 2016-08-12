@@ -362,6 +362,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         selector = Selector(classifier_model.top_bricks)
         classifier_convnet, = selector.select('/convnet').bricks
         classifier_mlp, = selector.select('/mlp').bricks
+
     random_brick = Random()
 
     # Initialize conditional variances
@@ -372,12 +373,20 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
     if discriminative_regularization:
         # We add discriminative regularization for the batch-normalized output
         # of the strided layers of the classifier.
-        for layer in classifier_convnet.layers[4::3]:
+        for layer in classifier_convnet.layers[1::3]:
             log_sigma = shared_floatx(
                 numpy.zeros(layer.get_dim('output')),
                 name='{}_log_sigma'.format(layer.name))
             add_role(log_sigma, PARAMETER)
             variance_parameters.append(log_sigma)
+        # include mlp
+        log_sigma = shared_floatx(
+            numpy.zeros([classifier_mlp.output_dim]),
+            name='{}_log_sigma'.format("MLP"))
+        add_role(log_sigma, PARAMETER)
+        variance_parameters.append(log_sigma)
+
+        print("Applying discriminative regularization on {} layers".format(len(variance_parameters)-1))
 
     # Computation graph creation is encapsulated within this function in order
     # to allow selecting which parts of the graph will use batch statistics for
@@ -414,26 +423,35 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         if discriminative_regularization:
             # Propagate both the input and the reconstruction through the
             # classifier
-            acts_cg = ComputationGraph([classifier_convnet.apply(x)])
+            acts_cg = ComputationGraph([classifier_mlp.apply(classifier_convnet.apply(x).flatten(ndim=2))])
             acts_hat_cg = ComputationGraph(
-                [classifier_convnet.apply(mu_theta)])
+                [classifier_mlp.apply(classifier_convnet.apply(mu_theta).flatten(ndim=2))])
 
             # Retrieve activations of interest and compute discriminative
             # regularization reconstruction terms
             cur_layer = 0
-            for layer, log_sigma in zip(classifier_convnet.layers[4::3],
+            for layer, log_sigma in zip(classifier_convnet.layers[1::3] + [classifier_mlp],
                                         variance_parameters[1:]):
+
                 variable_filter = VariableFilter(roles=[OUTPUT],
                                                  bricks=[layer])
 
                 d, = variable_filter(acts_cg)
                 d_hat, = variable_filter(acts_hat_cg)
-                log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
+
+                # TODO: this conditional could be less brittle
+                if "mlp" in layer.name.lower():
+                    log_sigma = log_sigma.dimshuffle('x', 0)
+                    sumaxis = [1]
+                else:
+                    log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
+                    sumaxis = [1, 2, 3]
 
                 discriminative_layer_term = -0.5 * (
                     tensor.log(2 * pi) + 2 * log_sigma +
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
-                ).sum(axis=[1, 2, 3])
+                ).sum(axis=sumaxis)
+
                 discriminative_term = discriminative_term + (disc_weights[cur_layer] * discriminative_layer_term)
                 cur_layer = cur_layer + 1
 
