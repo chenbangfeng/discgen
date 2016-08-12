@@ -202,7 +202,7 @@ def create_training_computation_graphs(image_size, net_depth):
     return cg, bn_dropout_cg
 
 
-def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
+def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every, final_epoch,
         dataset, color_convert, image_size, net_depth, allowed, stretch):
 
     streams = create_custom_streams(filename=dataset,
@@ -256,7 +256,7 @@ def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
     checkpoint = Checkpoint(classifier, every_n_epochs=checkpoint_every,
                             use_cpickle=True)
 
-    extensions = [Timing(), FinishAfter(after_n_epochs=50), train_monitoring,
+    extensions = [Timing(), FinishAfter(after_n_epochs=final_epoch), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
@@ -285,6 +285,8 @@ if __name__ == "__main__":
                         help="Stretch dataset labels to standard length")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
                         default=100, help="Size of each mini-batch")
+    parser.add_argument("--final-epoch", type=int, dest="final_epoch",
+                        default=50, help="Quit after which epoch")
     parser.add_argument("--monitor-every", type=int, dest="monitor_every",
                         default=5, help="Frequency in epochs for monitoring")
     parser.add_argument("--checkpoint-every", type=int, default=5,
@@ -307,6 +309,6 @@ if __name__ == "__main__":
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
     run(args.batch_size, args.classifier, args.oldmodel, args.monitor_every,
-        args.checkpoint_every, args.dataset, args.color_convert,
+        args.checkpoint_every, args.final_epoch, args.dataset, args.color_convert,
         args.image_size, args.net_depth,
         allowed, args.stretch)
