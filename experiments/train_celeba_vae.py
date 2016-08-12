@@ -258,7 +258,8 @@ def create_training_computation_graphs(discriminative_regularization):
     bricks = create_model_bricks()
     encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp = bricks
     if discriminative_regularization:
-        classifier_model = Model(load('celeba_classifier.zip').algorithm.cost)
+        with open('celeba_classifier.zip', 'rb') as src:
+            classifier_model = Model(load(src).algorithm.cost)
         selector = Selector(classifier_model.top_bricks)
         classifier_convnet, = selector.select('/convnet').bricks
     random_brick = Random()
