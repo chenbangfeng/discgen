@@ -1,4 +1,3 @@
-##TODO: OVERKILL
 """Does facegrid stuff."""
 import argparse
 
@@ -27,7 +26,8 @@ from fuel.datasets.hdf5 import H5PYDataset
 from fuel.utils import find_in_data_path
 from annoy import AnnoyIndex
 from sklearn.manifold import TSNE
-from sample_utils import get_anchor_images, anchors_from_image, get_image_vectors
+from fuel_helper import get_anchor_images
+from plat.utils import anchors_from_image
 
 def json_list_to_array(json_list):
     files = json_list.split(",")
@@ -138,6 +138,10 @@ def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize, gridw, gridh):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
+    parser.add_argument("--model-module", dest='model_module', type=str,
+                        default="utils.interface", help="module encapsulating model")
+    parser.add_argument("--model-class", dest='model_class', type=str,
+                        default="DiscGenModel", help="class encapsulating model")
     parser.add_argument('--build-annoy', dest='build_annoy',
                         default=False, action='store_true')
     parser.add_argument("--jsons", type=str, default=None,
@@ -204,9 +208,12 @@ if __name__ == "__main__":
         image_size = args.image_size
         _, _, extra_images = anchors_from_image(args.seeds_image, image_size=(image_size, image_size), unit_scale=False)
         net_inputs = (extra_images / 255.0).astype('float32')
+
         print('Loading saved model...')
-        model = Model(load(args.model).algorithm.cost)
-        image_vectors = get_image_vectors(model, net_inputs)
+        ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
+        dmodel = ModelClass(filename=args.model)
+
+        image_vectors = dmodel.encode_images(net_inputs)
         num_extras = len(extra_images)
         encoded = np.concatenate((encoded, image_vectors), axis=0)
         anchor_images = np.concatenate((anchor_images, extra_images), axis=0)

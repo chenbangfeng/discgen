@@ -8,18 +8,9 @@ import random
 import sys
 import json
 
-from discgen.utils import plot_image_grid
-from sample_utils import anchors_from_image, get_image_encoder_function, get_image_vectors, get_json_vectors, offset_from_string
-from sample_utils import get_dataset_iterator, get_anchor_images
-
-from fuel.datasets.hdf5 import H5PYDataset
-from fuel.utils import find_in_data_path
-from fuel.transformers.defaults import uint8_pixels_to_floatX
-from fuel.schemes import SequentialExampleScheme
-from fuel.streams import DataStream
-from discgen.utils import Colorize
-
+from fuel_helper import get_dataset_iterator, get_anchor_images
 from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid, create_chain_grid, create_fan_grid
+from plat.utils import anchors_from_image, get_json_vectors, offset_from_string
 
 import importlib
 g_image_size = 128
@@ -121,9 +112,7 @@ def get_global_offset(offsets, indices_str, scale):
     global_offset = offset_from_string(indices_str, offsets, dim)
     return scale * global_offset
 
-def stream_output_vectors(model, dataset, split, color_convert=False):
-    encoder_function = get_image_encoder_function(model)
-
+def stream_output_vectors(dmodel, dataset, split, color_convert=False):
     it = get_dataset_iterator(dataset, split)
     batch_size = 20
     done = False
@@ -141,14 +130,14 @@ def stream_output_vectors(model, dataset, split, color_convert=False):
                 else:
                     anchors.append(cur[0])
             anchors_input = np.array(anchors)
-            examples, latents = encoder_function(anchors_input)
+            latents = dmodel.encode_images(anchors_input)
             for v in latents:
                 print("JSON#{},".format(vector_to_json_array(v)))
         except StopIteration:
             # process any leftovers
             if len(anchors) > 0:
                 anchors_input = np.array(anchors)
-                examples, latents = encoder_function(anchors_input)
+                latents = dmodel.encode_images(anchors_input)
                 # end cut-n-paste
                 for v in latents[:-1]:
                     print("JSON#{},".format(vector_to_json_array(v)))
@@ -294,7 +283,7 @@ def main(cliargs):
         if anchors is not None:
             output_vectors(anchors)
         else:
-            stream_output_vectors(dmodel.model, args.dataset, args.split)
+            stream_output_vectors(dmodel, args.dataset, args.split)
         sys.exit(0)
 
     global_offset = None

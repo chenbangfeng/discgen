@@ -3,34 +3,17 @@
 """Plots model samples."""
 import argparse
 
-import theano
-from blocks.bricks import Random
-from blocks.graph import ComputationGraph
-from blocks.model import Model
-from blocks.select import Selector
-from blocks.serialization import load
-from blocks.utils import shared_floatx
-from blocks.config import config
-from theano import tensor
 import numpy as np
 import random
 import sys
 import json
 from scipy.misc import imread, imsave
 
-from discgen.utils import plot_image_grid
-from sample_utils import anchors_from_image, get_image_vectors, get_json_vectors, offset_from_string
-
-from fuel.datasets.hdf5 import H5PYDataset
-from fuel.utils import find_in_data_path
-from fuel.transformers.defaults import uint8_pixels_to_floatX
-from fuel.schemes import SequentialExampleScheme
-from fuel.streams import DataStream
-from discgen.utils import Colorize
-
+from plat.utils import anchors_from_image, get_json_vectors, offset_from_string
 from plat.canvas_layout import create_splash_canvas
 
 from PIL import Image
+import importlib
 
 channels = 4
 
@@ -145,27 +128,6 @@ class Canvas:
         img = Image.fromarray(out)
         img.save(save_path)
 
-def images_from_latents(z, model):
-    selector = Selector(model.top_bricks)
-    decoder_mlp, = selector.select('/decoder_mlp').bricks
-    decoder_convnet, = selector.select('/decoder_convnet').bricks
-
-    print('Building computation graph...')
-    sz = shared_floatx(z)
-    mu_theta = decoder_convnet.apply(
-        decoder_mlp.apply(sz).reshape(
-            (-1,) + decoder_convnet.get_dim('input_')))
-    computation_graph = ComputationGraph([mu_theta])
-
-    print('Compiling sampling function...')
-    sampling_function = theano.function(
-        computation_graph.inputs, computation_graph.outputs[0])
-
-    print('Sampling...')
-    samples = sampling_function()
-
-    return samples
-
 def apply_anchor_offsets(anchor, offsets, a, b, a_indices_str, b_indices_str):
     sa = 2.0 * (a - 0.5)
     sb = 2.0 * (b - 0.5)
@@ -192,6 +154,10 @@ def make_mask_layout(height, width, radius):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot model samples")
+    parser.add_argument("--model-module", dest='model_module', type=str,
+                        default="utils.interface", help="module encapsulating model")
+    parser.add_argument("--model-class", dest='model_class', type=str,
+                        default="DiscGenModel", help="class encapsulating model")
     parser.add_argument("--model", dest='model', type=str, default=None,
                         help="path to the saved model")
     parser.add_argument("--width", type=int, default=512,
@@ -263,11 +229,11 @@ if __name__ == "__main__":
     anchors = None
     if not args.passthrough:
         print('Loading saved model...')
-        model = Model(load(args.model).algorithm.cost)
+        ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
+        dmodel = ModelClass(filename=args.model)
 
         if anchor_images is not None:
-            # anchors = anchor_images
-            anchors = get_image_vectors(model, anchor_images)
+            anchors = dmodel.encode_images(anchor_images)
 
     if anchors is None:
         anchors = np.random.normal(loc=0, scale=1, size=(args.cols * args.rows, 100))
@@ -349,11 +315,8 @@ if __name__ == "__main__":
         curq = workq[:args.batch_size]
         workq = workq[args.batch_size:]
         latents = [e["z"] for e in curq]
-        images = images_from_latents(latents, model)
-        # images = latents
+        images = dmodel.sample_at(latents)
         for i in range(len(curq)):
             canvas.place_image(images[i], curq[i]["x"], curq[i]["y"], args.additive)
 
-    # canvas.place_image(anchor_images[1], 50, 50)
-    # canvas.place_image(anchor_images[2], 95, 95)
     canvas.save(args.save_path)

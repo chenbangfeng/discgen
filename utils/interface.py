@@ -1,10 +1,31 @@
 import theano
+from theano import tensor
 from blocks.model import Model
-from blocks.serialization import load
 from blocks.select import Selector
+from blocks.bricks import Random
+from blocks.serialization import load
 from blocks.graph import ComputationGraph
-from sample_utils import get_image_encoder_function
 from blocks.utils import shared_floatx
+
+def get_image_encoder_function(model):
+    selector = Selector(model.top_bricks)
+    encoder_convnet, = selector.select('/encoder_convnet').bricks
+    encoder_mlp, = selector.select('/encoder_mlp').bricks
+
+    print('Building computation graph...')
+    x = tensor.tensor4('features')
+    phi = encoder_mlp.apply(encoder_convnet.apply(x).flatten(ndim=2))
+    nlat = encoder_mlp.output_dim // 2
+    mu_phi = phi[:, :nlat]
+    log_sigma_phi = phi[:, nlat:]
+    epsilon = Random().theano_rng.normal(size=mu_phi.shape, dtype=mu_phi.dtype)
+    z = mu_phi + epsilon * tensor.exp(log_sigma_phi)
+    computation_graph = ComputationGraph([x, z])
+
+    print('Compiling reconstruction function...')
+    encoder_function = theano.function(
+        computation_graph.inputs, computation_graph.outputs)
+    return encoder_function
 
 class DiscGenModel:
     def __init__(self, filename=None, model=None):
