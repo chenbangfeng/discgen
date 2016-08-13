@@ -370,6 +370,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         numpy.zeros((3, image_size, image_size)), name='log_sigma_theta')
     add_role(log_sigma_theta, PARAMETER)
     variance_parameters = [log_sigma_theta]
+    num_disc_layers = 0
     if discriminative_regularization:
         # We add discriminative regularization for the batch-normalized output
         # of the strided layers of the classifier.
@@ -385,8 +386,8 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
             name='{}_log_sigma'.format("MLP"))
         add_role(log_sigma, PARAMETER)
         variance_parameters.append(log_sigma)
-
-        print("Applying discriminative regularization on {} layers".format(len(variance_parameters)-1))
+        num_disc_layers = len(variance_parameters)-1
+        print("Applying discriminative regularization on {} layers".format(num_disc_layers))
 
     # Computation graph creation is encapsulated within this function in order
     # to allow selecting which parts of the graph will use batch statistics for
@@ -419,13 +420,9 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
             (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
         ).sum(axis=[1, 2, 3])
 
-        discriminative_term0 = tensor.zeros_like(kl_term)
-        discriminative_term1 = tensor.zeros_like(kl_term)
-        discriminative_term2 = tensor.zeros_like(kl_term)
-        discriminative_term3 = tensor.zeros_like(kl_term)
-        discriminative_term4 = tensor.zeros_like(kl_term)
-        discriminative_term5 = tensor.zeros_like(kl_term)
-        discriminative_term6 = tensor.zeros_like(kl_term)
+        discriminative_layer_terms = [None] * num_disc_layers
+        for i in range(num_disc_layers):
+            discriminative_layer_terms[i] = tensor.zeros_like(kl_term)
         discriminative_term  = tensor.zeros_like(kl_term)
         if discriminative_regularization:
             # Propagate both the input and the reconstruction through the
@@ -455,22 +452,16 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
                     log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
                     sumaxis = [1, 2, 3]
 
-                discriminative_layer_term = -0.5 * (
+                discriminative_layer_term_unweighted = -0.5 * (
                     tensor.log(2 * pi) + 2 * log_sigma +
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=sumaxis)
 
-                if i == 0:
-                    discriminative_term0 = disc_weights[cur_layer] * discriminative_layer_term
-                    discriminative_term = discriminative_term + discriminative_term0
-                elif i == 1:
-                    discriminative_term1 = disc_weights[cur_layer] * discriminative_layer_term
-                    discriminative_term = discriminative_term + discriminative_term1
-                elif i == 6:
-                    discriminative_term6 = disc_weights[cur_layer] * discriminative_layer_term
-                    discriminative_term = discriminative_term + discriminative_term6
+                if i == 0 or i == 1 or i == 6:
+                    discriminative_layer_terms[i] = disc_weights[cur_layer] * discriminative_layer_term_unweighted
+                    discriminative_term = discriminative_term + discriminative_layer_terms[i]
                 else:
-                    discriminative_term = discriminative_term + (disc_weights[cur_layer] * discriminative_layer_term)
+                    discriminative_term = discriminative_term + (disc_weights[cur_layer] * discriminative_layer_term_unweighted)
 
                 cur_layer = cur_layer + 1
 
@@ -482,8 +473,8 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         #                          reconstruction_term, discriminative_term])
 
         return ComputationGraph([cost, kl_term,
-                                 reconstruction_term, discriminative_term,
-                                 discriminative_term0, discriminative_term1, discriminative_term6])
+                                 reconstruction_term, discriminative_term] +
+                                 [discriminative_layer_terms[0], discriminative_layer_terms[1], discriminative_layer_terms[6]])
 
     cg = create_computation_graph()
     with batch_normalization(encoder_convnet, encoder_mlp,
@@ -546,8 +537,11 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     monitored_quantities_list = []
     for graph in [bn_cg, cg]:
         # cost, kl_term, reconstruction_term, discriminative_term = graph.outputs
-        cost, kl_term, reconstruction_term, discriminative_term, \
-            discriminative_term_layer_0, discriminative_term_layer_1, discriminative_term_layer_6 = graph.outputs
+        cost, kl_term, reconstruction_term, discriminative_term = graph.outputs[:4]
+        discriminative_layer_terms = graph.outputs[4:]
+        discriminative_term_layer_0, discriminative_term_layer_1, discriminative_term_layer_6 = discriminative_layer_terms
+        # cost, kl_term, reconstruction_term, discriminative_term, \
+        #     discriminative_term_layer_0, discriminative_term_layer_1, discriminative_term_layer_6 = graph.outputs
         cost.name = 'nll_upper_bound'
         avg_kl_term = kl_term.mean(axis=0)
         avg_kl_term.name = 'avg_kl_term'
@@ -563,8 +557,8 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         avg_discriminative_term_layer_6.name = 'avg_discriminative_term_layer_6'
         monitored_quantities_list.append(
             [cost, avg_kl_term, avg_reconstruction_term,
-             avg_discriminative_term,
-             avg_discriminative_term_layer_0,
+             avg_discriminative_term] +
+             [avg_discriminative_term_layer_0,
              avg_discriminative_term_layer_1,
              avg_discriminative_term_layer_6
              ])
