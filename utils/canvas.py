@@ -152,7 +152,7 @@ def make_mask_layout(height, width, radius):
                 I[y][x] = 255
     return I
 
-if __name__ == "__main__":
+def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model-module", dest='model_module', type=str,
                         default="utils.interface", help="module encapsulating model")
@@ -179,7 +179,7 @@ if __name__ == "__main__":
     parser.add_argument("--save-path", type=str, default="out.png",
                         help="where to save the generated samples")
     parser.add_argument("--seed", type=int,
-                default=None, help="Optional random seed")
+                        default=None, help="Optional random seed")
     parser.add_argument('--anchor-image', dest='anchor_image', default=None,
                         help="use image as source of anchors")
     parser.add_argument('--anchor-splash', dest='anchor_splash', default=None,
@@ -214,7 +214,7 @@ if __name__ == "__main__":
                         help="which indices to combine for offset b")
     parser.add_argument("--image-size", dest='image_size', type=int, default=64,
                         help="size of (offset) images")
-    args = parser.parse_args()
+    args = parser.parse_args(cliargs)
 
     if args.seed:
         np.random.seed(args.seed)
@@ -315,8 +315,11 @@ if __name__ == "__main__":
         curq = workq[:args.batch_size]
         workq = workq[args.batch_size:]
         latents = [e["z"] for e in curq]
-        images = dmodel.sample_at(latents)
+        images = dmodel.sample_at(np.array(latents))
         for i in range(len(curq)):
             canvas.place_image(images[i], curq[i]["x"], curq[i]["y"], args.additive)
 
     canvas.save(args.save_path)
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
