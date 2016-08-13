@@ -346,7 +346,7 @@ def create_model_bricks(z_dim, image_size, depth):
 
 
 def create_training_computation_graphs(z_dim, image_size, net_depth, discriminative_regularization,
-                                       classifer, reconstruction_factor,
+                                       classifer, vintage, reconstruction_factor,
                                        kl_factor, discriminative_factor, disc_weights):
     x = tensor.tensor4('features')
     pi = numpy.cast[theano.config.floatX](numpy.pi)
@@ -354,10 +354,15 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
     bricks = create_model_bricks(z_dim=z_dim, image_size=image_size, depth=net_depth)
     encoder_convnet, encoder_mlp, decoder_convnet, decoder_mlp = bricks
     if discriminative_regularization:
-        classifier_model = Model(load(classifer).algorithm.cost)
+        if vintage:
+            classifier_model = Model(load(classifer).algorithm.cost)
+        else:
+            with open(classifer, 'rb') as src:
+                classifier_model = Model(load(src).algorithm.cost)
         selector = Selector(classifier_model.top_bricks)
         classifier_convnet, = selector.select('/convnet').bricks
         classifier_mlp, = selector.select('/mlp').bricks
+
     random_brick = Random()
 
     # Initialize conditional variances
@@ -365,15 +370,24 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         numpy.zeros((3, image_size, image_size)), name='log_sigma_theta')
     add_role(log_sigma_theta, PARAMETER)
     variance_parameters = [log_sigma_theta]
+    num_disc_layers = 0
     if discriminative_regularization:
         # We add discriminative regularization for the batch-normalized output
         # of the strided layers of the classifier.
-        for layer in classifier_convnet.layers[4::3]:
+        for layer in classifier_convnet.layers[1::3]:
             log_sigma = shared_floatx(
                 numpy.zeros(layer.get_dim('output')),
                 name='{}_log_sigma'.format(layer.name))
             add_role(log_sigma, PARAMETER)
             variance_parameters.append(log_sigma)
+        # include mlp
+        log_sigma = shared_floatx(
+            numpy.zeros([classifier_mlp.output_dim]),
+            name='{}_log_sigma'.format("MLP"))
+        add_role(log_sigma, PARAMETER)
+        variance_parameters.append(log_sigma)
+        num_disc_layers = len(variance_parameters)-1
+        print("Applying discriminative regularization on {} layers".format(num_disc_layers))
 
     # Computation graph creation is encapsulated within this function in order
     # to allow selecting which parts of the graph will use batch statistics for
@@ -406,39 +420,57 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
             (x - mu_theta) ** 2 / tensor.exp(2 * log_sigma)
         ).sum(axis=[1, 2, 3])
 
-        discriminative_term = tensor.zeros_like(kl_term)
+        discriminative_layer_terms = [None] * num_disc_layers
+        for i in range(num_disc_layers):
+            discriminative_layer_terms[i] = tensor.zeros_like(kl_term)
+        discriminative_term  = tensor.zeros_like(kl_term)
         if discriminative_regularization:
             # Propagate both the input and the reconstruction through the
             # classifier
-            acts_cg = ComputationGraph([classifier_convnet.apply(x)])
+            acts_cg = ComputationGraph([classifier_mlp.apply(classifier_convnet.apply(x).flatten(ndim=2))])
             acts_hat_cg = ComputationGraph(
-                [classifier_convnet.apply(mu_theta)])
+                [classifier_mlp.apply(classifier_convnet.apply(mu_theta).flatten(ndim=2))])
 
             # Retrieve activations of interest and compute discriminative
             # regularization reconstruction terms
             cur_layer = 0
-            for layer, log_sigma in zip(classifier_convnet.layers[4::3],
-                                        variance_parameters[1:]):
+            for i, zip_pair in enumerate(zip(classifier_convnet.layers[1::3] + [classifier_mlp],
+                                        variance_parameters[1:])):
+
+                layer, log_sigma = zip_pair
                 variable_filter = VariableFilter(roles=[OUTPUT],
                                                  bricks=[layer])
 
                 d, = variable_filter(acts_cg)
                 d_hat, = variable_filter(acts_hat_cg)
-                log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
 
-                discriminative_layer_term = -0.5 * (
+                # TODO: this conditional could be less brittle
+                if "mlp" in layer.name.lower():
+                    log_sigma = log_sigma.dimshuffle('x', 0)
+                    sumaxis = [1]
+                else:
+                    log_sigma = log_sigma.dimshuffle('x', 0, 1, 2)
+                    sumaxis = [1, 2, 3]
+
+                discriminative_layer_term_unweighted = -0.5 * (
                     tensor.log(2 * pi) + 2 * log_sigma +
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
-                ).sum(axis=[1, 2, 3])
-                discriminative_term = discriminative_term + (disc_weights[cur_layer] * discriminative_layer_term)
+                ).sum(axis=sumaxis)
+
+                discriminative_layer_terms[i] = disc_weights[cur_layer] * discriminative_layer_term_unweighted
+                discriminative_term = discriminative_term + discriminative_layer_terms[i]
+
                 cur_layer = cur_layer + 1
 
         total_reconstruction_term = reconstruction_factor * \
             reconstruction_term + 0.5 * discriminative_factor * discriminative_term
         cost = (kl_factor * kl_term - total_reconstruction_term).mean()
 
+        # return ComputationGraph([cost, kl_term,
+        #                          reconstruction_term, discriminative_term])
+
         return ComputationGraph([cost, kl_term,
-                                 reconstruction_term, discriminative_term])
+                                 reconstruction_term, discriminative_term] + discriminative_layer_terms)
 
     cg = create_computation_graph()
     with batch_normalization(encoder_convnet, encoder_mlp,
@@ -449,7 +481,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
 
 
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
-        classifier, monitor_every, checkpoint_every, dataset, color_convert,
+        classifier, vintage, monitor_every, checkpoint_every, dataset, color_convert,
         image_size, net_depth, subdir,
         reconstruction_factor, kl_factor, discriminative_factor, disc_weights):
 
@@ -470,7 +502,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     # statistics. They are updated following an exponential moving average.
     rval = create_training_computation_graphs(
                 z_dim, image_size, net_depth, discriminative_regularization, classifier,
-                reconstruction_factor, kl_factor, discriminative_factor, disc_weights)
+                vintage, reconstruction_factor, kl_factor, discriminative_factor, disc_weights)
     cg, bn_cg, variance_parameters = rval
 
     pop_updates = list(
@@ -500,7 +532,10 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
 
     monitored_quantities_list = []
     for graph in [bn_cg, cg]:
-        cost, kl_term, reconstruction_term, discriminative_term = graph.outputs
+        # cost, kl_term, reconstruction_term, discriminative_term = graph.outputs
+        cost, kl_term, reconstruction_term, discriminative_term = graph.outputs[:4]
+        discriminative_layer_terms = graph.outputs[4:]
+
         cost.name = 'nll_upper_bound'
         avg_kl_term = kl_term.mean(axis=0)
         avg_kl_term.name = 'avg_kl_term'
@@ -508,9 +543,17 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         avg_reconstruction_term.name = 'avg_reconstruction_term'
         avg_discriminative_term = discriminative_term.mean(axis=0)
         avg_discriminative_term.name = 'avg_discriminative_term'
+
+        num_layer_terms = len(discriminative_layer_terms)
+        avg_discriminative_layer_terms = [None] * num_layer_terms
+        for i, term in enumerate(discriminative_layer_terms):
+            avg_discriminative_layer_terms[i] = discriminative_layer_terms[i].mean(axis=0)
+            avg_discriminative_layer_terms[i].name = "avg_discriminative_term_layer_{:02d}".format(i)
+
         monitored_quantities_list.append(
             [cost, avg_kl_term, avg_reconstruction_term,
-             avg_discriminative_term])
+             avg_discriminative_term] + avg_discriminative_layer_terms)
+
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
         updates=extra_updates, after_epoch=False, before_first_epoch=True,
@@ -550,6 +593,9 @@ if __name__ == "__main__":
                         help="apply discriminative regularization")
     parser.add_argument('--classifier', dest='classifier', type=str,
                         default="celeba_classifier.zip")
+    parser.add_argument('--vintage', dest='vintage',
+                        default=False, action='store_true',
+                        help="Are you running a vintage version of blocks?")
     parser.add_argument('--model', dest='model', type=str,
                         default="celeba_vae_regularization.zip")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
@@ -589,7 +635,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     disc_weights = map(float, args.discriminative_layer_weights.split(","))
     run(args.batch_size, args.model, args.z_dim, args.oldmodel,
-        args.regularize, args.classifier, args.monitor_every,
+        args.regularize, args.classifier, args.vintage, args.monitor_every,
         args.checkpoint_every, args.dataset, args.color_convert,
         args.image_size, args.net_depth, args.subdir,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor, disc_weights)

@@ -24,132 +24,141 @@ from theano import tensor
 from discgen.utils import create_custom_streams
 
 def create_model_bricks(image_size, depth):
-    encoder_layers = []
-    if depth > 0:
-        encoder_layers = encoder_layers + [
+    # original celebA64 was depth=3 (went to bach_norm6)
+    layers = []
+    if(depth > 0):
+        layers = layers + [
             Convolutional(
-                filter_size=(3, 3),
-                border_mode=(1, 1),
+                filter_size=(4, 4),
                 num_filters=32,
                 name='conv1'),
             SpatialBatchNormalization(name='batch_norm1'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=32,
                 name='conv2'),
             SpatialBatchNormalization(name='batch_norm2'),
             Rectifier(),
+        ]
+    if(depth > 1):
+        layers = layers + [
             Convolutional(
-                filter_size=(2, 2),
-                step=(2, 2),
-                num_filters=32,
+                filter_size=(4, 4),
+                num_filters=64,
                 name='conv3'),
             SpatialBatchNormalization(name='batch_norm3'),
-            Rectifier()
-        ]
-    if depth > 1:
-        encoder_layers = encoder_layers + [
+            Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=64,
                 name='conv4'),
             SpatialBatchNormalization(name='batch_norm4'),
             Rectifier(),
+        ]
+    if(depth > 2):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=64,
+                num_filters=128,
                 name='conv5'),
             SpatialBatchNormalization(name='batch_norm5'),
             Rectifier(),
             Convolutional(
-                filter_size=(2, 2),
+                filter_size=(3, 3),
                 step=(2, 2),
-                num_filters=64,
+                num_filters=128,
                 name='conv6'),
             SpatialBatchNormalization(name='batch_norm6'),
-            Rectifier()
+            Rectifier(),
         ]
-    if depth > 2:
-        encoder_layers = encoder_layers + [
+    if(depth > 3):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=128,
+                num_filters=256,
                 name='conv7'),
             SpatialBatchNormalization(name='batch_norm7'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=128,
+                step=(2, 2),
+                num_filters=256,
                 name='conv8'),
             SpatialBatchNormalization(name='batch_norm8'),
             Rectifier(),
-            Convolutional(
-                filter_size=(2, 2),
-                step=(2, 2),
-                num_filters=128,
-                name='conv9'),
-            SpatialBatchNormalization(name='batch_norm9'),
-            Rectifier()
         ]
-    if depth > 3:
-        encoder_layers = encoder_layers + [
+    if(depth > 4):
+        layers = layers + [
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=256,
-                name='conv10'),
-            SpatialBatchNormalization(name='batch_norm10'),
+                num_filters=512,
+                name='conv9'),
+            SpatialBatchNormalization(name='batch_norm9'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
-                num_filters=256,
+                step=(2, 2),
+                num_filters=512,
+                name='conv10'),
+            SpatialBatchNormalization(name='batch_norm10'),
+            Rectifier(),
+        ]
+    if(depth > 5):
+        layers = layers + [
+            Convolutional(
+                filter_size=(4, 4),
+                num_filters=512,
                 name='conv11'),
             SpatialBatchNormalization(name='batch_norm11'),
             Rectifier(),
             Convolutional(
-                filter_size=(2, 2),
+                filter_size=(3, 3),
                 step=(2, 2),
-                num_filters=256,
+                num_filters=512,
                 name='conv12'),
             SpatialBatchNormalization(name='batch_norm12'),
             Rectifier(),
         ]
-    if depth > 4:
-        encoder_layers = encoder_layers + [
+    if(depth > 6):
+        layers = layers + [
             Convolutional(
-                filter_size=(3, 3),
-                border_mode=(1, 1),
+                filter_size=(4, 4),
                 num_filters=512,
                 name='conv13'),
             SpatialBatchNormalization(name='batch_norm13'),
             Rectifier(),
             Convolutional(
                 filter_size=(3, 3),
-                border_mode=(1, 1),
+                step=(2, 2),
                 num_filters=512,
                 name='conv14'),
             SpatialBatchNormalization(name='batch_norm14'),
             Rectifier(),
+        ]
+    if(depth > 7):
+        layers = layers + [
             Convolutional(
-                filter_size=(2, 2),
-                step=(2, 2),
+                filter_size=(4, 4),
                 num_filters=512,
                 name='conv15'),
             SpatialBatchNormalization(name='batch_norm15'),
-            Rectifier()
+            Rectifier(),
+            Convolutional(
+                filter_size=(3, 3),
+                step=(2, 2),
+                num_filters=512,
+                name='conv16'),
+            SpatialBatchNormalization(name='batch_norm16'),
+            Rectifier(),
         ]
 
-    print("creating model of depth {} with {} layers".format(depth, len(encoder_layers)))
+    print("creating model of depth {} with {} layers".format(depth, len(layers)))
 
     convnet = ConvolutionalSequence(
-        layers=encoder_layers,
+        layers=layers,
         num_channels=3,
         image_size=(image_size, image_size),
         use_bias=False,
@@ -166,7 +175,7 @@ def create_model_bricks(image_size, depth):
         name='mlp')
     mlp.initialize()
 
-    return convnet, mlp, len(encoder_layers)
+    return convnet, mlp, len(layers)
 
 
 def create_training_computation_graphs(image_size, net_depth):
@@ -193,7 +202,7 @@ def create_training_computation_graphs(image_size, net_depth):
     return cg, bn_dropout_cg
 
 
-def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
+def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every, final_epoch,
         dataset, color_convert, image_size, net_depth, allowed, stretch):
 
     streams = create_custom_streams(filename=dataset,
@@ -247,7 +256,7 @@ def run(batch_size, classifier, oldmodel, monitor_every, checkpoint_every,
     checkpoint = Checkpoint(classifier, every_n_epochs=checkpoint_every,
                             use_cpickle=True)
 
-    extensions = [Timing(), FinishAfter(after_n_epochs=50), train_monitoring,
+    extensions = [Timing(), FinishAfter(after_n_epochs=final_epoch), train_monitoring,
                   valid_monitoring, checkpoint, Printing(), ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
@@ -276,6 +285,8 @@ if __name__ == "__main__":
                         help="Stretch dataset labels to standard length")
     parser.add_argument("--batch-size", type=int, dest="batch_size",
                         default=100, help="Size of each mini-batch")
+    parser.add_argument("--final-epoch", type=int, dest="final_epoch",
+                        default=50, help="Quit after which epoch")
     parser.add_argument("--monitor-every", type=int, dest="monitor_every",
                         default=5, help="Frequency in epochs for monitoring")
     parser.add_argument("--checkpoint-every", type=int, default=5,
@@ -298,6 +309,6 @@ if __name__ == "__main__":
     if(args.allowed):
         allowed = map(int, args.allowed.split(","))
     run(args.batch_size, args.classifier, args.oldmodel, args.monitor_every,
-        args.checkpoint_every, args.dataset, args.color_convert,
+        args.checkpoint_every, args.final_epoch, args.dataset, args.color_convert,
         args.image_size, args.net_depth,
         allowed, args.stretch)
