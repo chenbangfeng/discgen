@@ -226,6 +226,8 @@ if __name__ == "__main__":
                         help="prefix name for alpha mask to use (full/rounded/hex")
     parser.add_argument('--mask-layout', dest='mask_layout', default=None,
                         help="use image as source of splash grid points")
+    parser.add_argument('--mask-scale', dest='mask_scale', default=1.0, type=float,
+                        help="Scale mask layout (squeeze)")
     parser.add_argument('--mask-width', dest='mask_width', type=int, default=15,
                         help="width for computed mask")
     parser.add_argument('--mask-height', dest='mask_height', type=int, default=15,
@@ -324,9 +326,9 @@ if __name__ == "__main__":
                 a = float(xpos) / (im_width - 1)
                 if do_hex and ypos % 2 == 0:
                     a = a + 0.5 / (im_width - 1)
-                x = canvas.xmax * a
+                x = args.mask_scale * canvas.xmax * a
                 b = float(ypos) / (im_height - 1)
-                y = canvas.ymax * b
+                y = args.mask_scale * canvas.ymax * b
                 if not mask_layout[ypos][xpos] > 128:
                     pass
                 elif args.passthrough:
