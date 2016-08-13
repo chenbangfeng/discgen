@@ -1,29 +1,12 @@
 """Does facegrid stuff."""
 import argparse
 
-import idx2numpy
-from matplotlib import pylab as plt
 import numpy as np
 import os
-import csv
-from scipy.misc import imread
-from scipy.misc import imresize 
-
-import tarfile
-import csv
-import gzip
-import shutil
-from random import shuffle
-import zipfile
 import json
 import sys
 
 from PIL import Image
-
-from blocks.model import Model
-from blocks.serialization import load
-from fuel.datasets.hdf5 import H5PYDataset
-from fuel.utils import find_in_data_path
 from annoy import AnnoyIndex
 from sklearn.manifold import TSNE
 from fuel_helper import get_anchor_images
@@ -136,7 +119,7 @@ def neighbors_to_rfgrid(neighbors, encoded, imdata, gsize, gridw, gridh):
 
     return Image.fromarray(canvas)
 
-if __name__ == "__main__":
+def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model-module", dest='model_module', type=str,
                         default="utils.interface", help="module encapsulating model")
@@ -176,7 +159,7 @@ if __name__ == "__main__":
                         help="height of output grid")
     parser.add_argument('--range', dest='range', default="0",
                         help="Range of indexes to run.")
-    args = parser.parse_args()
+    args = parser.parse_args(cliargs)
 
     encoded = json_list_to_array(args.jsons)
     # print(encoded.shape)
@@ -242,4 +225,5 @@ if __name__ == "__main__":
         out_template = "{}/{}".format(args.outdir, args.outfile)
         g.save(out_template.format(file_num))
 
-# 'encodings/celeba_dlib_128_200z_a02.annoy'
+if __name__ == '__main__':
+    main(sys.argv[1:])
