@@ -11,7 +11,12 @@ class DiscGenModel:
         if model is not None:
             self.model = model
         else:
-            self.model = Model(load(filename).algorithm.cost)
+            try:
+                self.model = Model(load(filename).algorithm.cost)
+            except AttributeError:
+                # newer version of blocks
+                with open(filename, 'rb') as src:
+                    self.model = Model(load(src).algorithm.cost)
 
     def encode_images(self, images):
         encoder_function = get_image_encoder_function(self.model)
