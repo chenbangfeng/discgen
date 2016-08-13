@@ -457,11 +457,8 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=sumaxis)
 
-                if i == 0 or i == 1 or i == 6:
-                    discriminative_layer_terms[i] = disc_weights[cur_layer] * discriminative_layer_term_unweighted
-                    discriminative_term = discriminative_term + discriminative_layer_terms[i]
-                else:
-                    discriminative_term = discriminative_term + (disc_weights[cur_layer] * discriminative_layer_term_unweighted)
+                discriminative_layer_terms[i] = disc_weights[cur_layer] * discriminative_layer_term_unweighted
+                discriminative_term = discriminative_term + discriminative_layer_terms[i]
 
                 cur_layer = cur_layer + 1
 
@@ -473,8 +470,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
         #                          reconstruction_term, discriminative_term])
 
         return ComputationGraph([cost, kl_term,
-                                 reconstruction_term, discriminative_term] +
-                                 [discriminative_layer_terms[0], discriminative_layer_terms[1], discriminative_layer_terms[6]])
+                                 reconstruction_term, discriminative_term] + discriminative_layer_terms)
 
     cg = create_computation_graph()
     with batch_normalization(encoder_convnet, encoder_mlp,
@@ -539,9 +535,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         # cost, kl_term, reconstruction_term, discriminative_term = graph.outputs
         cost, kl_term, reconstruction_term, discriminative_term = graph.outputs[:4]
         discriminative_layer_terms = graph.outputs[4:]
-        discriminative_term_layer_0, discriminative_term_layer_1, discriminative_term_layer_6 = discriminative_layer_terms
-        # cost, kl_term, reconstruction_term, discriminative_term, \
-        #     discriminative_term_layer_0, discriminative_term_layer_1, discriminative_term_layer_6 = graph.outputs
+
         cost.name = 'nll_upper_bound'
         avg_kl_term = kl_term.mean(axis=0)
         avg_kl_term.name = 'avg_kl_term'
@@ -549,19 +543,17 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         avg_reconstruction_term.name = 'avg_reconstruction_term'
         avg_discriminative_term = discriminative_term.mean(axis=0)
         avg_discriminative_term.name = 'avg_discriminative_term'
-        avg_discriminative_term_layer_0 = discriminative_term_layer_0.mean(axis=0)
-        avg_discriminative_term_layer_0.name = 'avg_discriminative_term_layer_0'
-        avg_discriminative_term_layer_1 = discriminative_term_layer_1.mean(axis=0)
-        avg_discriminative_term_layer_1.name = 'avg_discriminative_term_layer_1'
-        avg_discriminative_term_layer_6 = discriminative_term_layer_6.mean(axis=0)
-        avg_discriminative_term_layer_6.name = 'avg_discriminative_term_layer_6'
+
+        num_layer_terms = len(discriminative_layer_terms)
+        avg_discriminative_layer_terms = [None] * num_layer_terms
+        for i, term in enumerate(discriminative_layer_terms):
+            avg_discriminative_layer_terms[i] = discriminative_layer_terms[i].mean(axis=0)
+            avg_discriminative_layer_terms[i].name = "avg_discriminative_term_layer_{:02d}".format(i)
+
         monitored_quantities_list.append(
             [cost, avg_kl_term, avg_reconstruction_term,
-             avg_discriminative_term] +
-             [avg_discriminative_term_layer_0,
-             avg_discriminative_term_layer_1,
-             avg_discriminative_term_layer_6
-             ])
+             avg_discriminative_term] + avg_discriminative_layer_terms)
+
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
         updates=extra_updates, after_epoch=False, before_first_epoch=True,
