@@ -457,17 +457,20 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
                     (d - d_hat) ** 2 / tensor.exp(2 * log_sigma)
                 ).sum(axis=sumaxis)
 
-                discriminative_layer_terms[i] = disc_weights[cur_layer] * discriminative_layer_term_unweighted
+                discriminative_layer_terms[i] = discriminative_factor * disc_weights[cur_layer] * discriminative_layer_term_unweighted
                 discriminative_term = discriminative_term + discriminative_layer_terms[i]
 
                 cur_layer = cur_layer + 1
 
-        total_reconstruction_term = reconstruction_factor * \
-            reconstruction_term + 0.5 * discriminative_factor * discriminative_term
-        cost = (kl_factor * kl_term - total_reconstruction_term).mean()
+        # scale terms (disc is prescaled by layer)
+        reconstruction_term = reconstruction_factor * reconstruction_term
+        kl_term = kl_factor * kl_term
 
-        # return ComputationGraph([cost, kl_term,
-        #                          reconstruction_term, discriminative_term])
+        # total_reconstruction_term is reconstruction + discriminative
+        total_reconstruction_term = reconstruction_term + discriminative_term
+
+        # cost is mean(kl - total reconstruction)
+        cost = (kl_term - total_reconstruction_term).mean()
 
         return ComputationGraph([cost, kl_term,
                                  reconstruction_term, discriminative_term] + discriminative_layer_terms)
