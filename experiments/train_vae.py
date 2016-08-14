@@ -26,7 +26,8 @@ from blocks.serialization import load
 from blocks.utils import find_bricks, shared_floatx
 from theano import tensor
 
-from discgen.utils import create_celeba_streams, create_custom_streams
+from discgen.utils import create_celeba_streams
+from utils.fuel_helper import create_custom_streams
 from utils.interface import DiscGenModel
 from utils.samplecheckpoint import SampleCheckpoint
 

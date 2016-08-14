@@ -7,10 +7,10 @@ from blocks.initialization import Constant
 from fuel.datasets import SVHN, CIFAR10, CelebA
 from fuel.schemes import ShuffledScheme
 from fuel.streams import DataStream
-from fuel.transformers import AgnosticSourcewiseTransformer
 from fuel.datasets import H5PYDataset
 from fuel.transformers.defaults import uint8_pixels_to_floatX
 from fuel.utils import find_in_data_path
+from fuel.transformers import AgnosticSourcewiseTransformer
 from matplotlib import pyplot
 from mpl_toolkits.axes_grid1 import ImageGrid
 from six.moves import zip, cPickle
@@ -122,92 +122,6 @@ def create_svhn_streams(training_batch_size, monitoring_batch_size):
     return create_streams(train_set, valid_set, test_set, training_batch_size,
                           monitoring_batch_size)
 
-
-class Colorize(AgnosticSourcewiseTransformer):
-    """Triples a grayscale image to convert it to color.
-
-    This transformer can be used to adapt a one one-channel
-    grayscale image to a network that expects three color
-    channels by simply replictaing the single channel
-    three times.
-    """
-    def __init__(self, data_stream, **kwargs):
-        super(Colorize, self).__init__(
-             data_stream=data_stream,
-             produces_examples=data_stream.produces_examples,
-             **kwargs)
-
-    def transform_any_source(self, source, _):
-        iters, dim, height, width = source.shape
-        return np.tile(source.reshape(iters*dim, 1, 64, 64), (1, 3, 1, 1))
-
-
-def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
-                          include_targets=False, color_convert=False,
-                          allowed=None, stretch=False):
-    """Creates data streams from fuel hdf5 file.
-
-    Currently features must be 64x64.
-
-    Parameters
-    ----------
-    filename : string
-        basename to hdf5 file for input
-    training_batch_size : int
-        Batch size for training.
-    monitoring_batch_size : int
-        Batch size for monitoring.
-    include_targets : bool
-        If ``True``, use both features and targets. If ``False``, use
-        features only.
-    color_convert : bool
-        If ``True``, input is assumed to be one-channel, and so will
-        be transformed to three-channel by duplication.
-
-    Returns
-    -------
-    rval : tuple of data streams
-        Data streams for the main loop, the training set monitor,
-        the validation set monitor and the test set monitor.
-
-    """
-    sources = ('features', 'targets') if include_targets else ('features',)
-
-    dataset_fname = find_in_data_path(filename+'.hdf5')
-    data_train = H5PYDataset(dataset_fname, which_sets=['train'],
-                             sources=sources)
-    data_valid = H5PYDataset(dataset_fname, which_sets=['valid'],
-                             sources=sources)
-    data_test = H5PYDataset(dataset_fname, which_sets=['test'],
-                            sources=sources)
-    data_train.default_transformers = uint8_pixels_to_floatX(('features',))
-    data_valid.default_transformers = uint8_pixels_to_floatX(('features',))
-    data_test.default_transformers = uint8_pixels_to_floatX(('features',))
-
-    results = create_streams(data_train, data_valid, data_test,
-                             training_batch_size, monitoring_batch_size)
-
-    if color_convert:
-        results = tuple(map(
-                    lambda s: Colorize(s, which_sources=('features',)),
-                    results))
-
-    # wrap labels in stretcher if requested
-    if stretch:
-        results = tuple(map(
-                    lambda s: StretchLabels(s, which_sources=('targets',)),
-                    results))
-
-    # wrap labels in scrubber if not all labels are allowed
-    if allowed:
-        results = tuple(map(
-                    lambda s: Scrubber(s, allowed=allowed,
-                                       which_sources=('targets',)),
-                    results))
-
-    return results
-
-
 def create_cifar10_streams(training_batch_size, monitoring_batch_size):
     """Creates CIFAR10 data streams.
 
@@ -233,62 +147,6 @@ def create_cifar10_streams(training_batch_size, monitoring_batch_size):
 
     return create_streams(train_set, valid_set, test_set, training_batch_size,
                           monitoring_batch_size)
-
-
-class Scrubber(AgnosticSourcewiseTransformer):
-    """Used to whitelist selected labels for training.
-
-    This transformer zeros out all but selected attribute
-    labels for training. This allows custom classifiers to
-    be built on a subset of available features
-
-    Parameters
-    ----------
-    allowed : list of int
-        Whitelist of indexes to allow in training. For example,
-        passing [4, 7] means only labels at positions 4 and 7
-        will be used for training, and all others will be
-        zeroed out.
-    """
-    def __init__(self, data_stream, allowed, **kwargs):
-        super(Scrubber, self).__init__(
-             data_stream=data_stream,
-             produces_examples=data_stream.produces_examples,
-             **kwargs)
-        self.allowed = [0] * 40
-        for a in allowed:
-            self.allowed[a] = 1
-
-    def transform_any_source(self, source, _):
-        return [a*b for a, b in zip(self.allowed, source)]
-
-
-class StretchLabels(AgnosticSourcewiseTransformer):
-    """Used to stretch a set of vectors by zero-padding.
-
-    This transformer appends zeros to a vector to get it
-    to a predefined length.
-
-    Parameters
-    ----------
-    length : int
-        Target lenth of vector.
-    """
-    def __init__(self, data_stream, length=64, **kwargs):
-        super(StretchLabels, self).__init__(
-             data_stream=data_stream,
-             produces_examples=data_stream.produces_examples,
-             **kwargs)
-        self.length = length
-
-    def transform_any_source(self, source, _):
-        if len(source > 0):
-            npad = self.length - len(source[0])
-            return [np.pad(a, pad_width=(0, npad), mode='constant',
-                           constant_values=0) for a in source]
-        else:
-            return source
-
 
 def create_celeba_streams(training_batch_size, monitoring_batch_size,
                           include_targets=False):
@@ -496,3 +354,32 @@ def log_sum_exp(A, axis=None):
             axis = [axis]
         return B.dimshuffle([i for i in range(B.ndim) if
                              i % B.ndim not in axis])
+
+#### THE FOLLOWING HAVE MOVED TO FUEL_HELPERS
+#### but are kept here so we can still load serialized models
+
+class StretchLabels(AgnosticSourcewiseTransformer):
+    """Used to stretch a set of vectors by zero-padding.
+
+    This transformer appends zeros to a vector to get it
+    to a predefined length.
+
+    Parameters
+    ----------
+    length : int
+        Target lenth of vector.
+    """
+    def __init__(self, data_stream, length=64, **kwargs):
+        super(StretchLabels, self).__init__(
+             data_stream=data_stream,
+             produces_examples=data_stream.produces_examples,
+             **kwargs)
+        self.length = length
+
+    def transform_any_source(self, source, _):
+        if len(source > 0):
+            npad = self.length - len(source[0])
+            return [np.pad(a, pad_width=(0, npad), mode='constant',
+                           constant_values=0) for a in source]
+        else:
+            return source

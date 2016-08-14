@@ -8,7 +8,7 @@ import theano.tensor as T
 from blocks.extensions.saveload import Checkpoint
 
 from sample import grid_from_latents
-from sample_utils import get_anchor_images
+from utils.fuel_helper import get_anchor_images
 from plat.grid_layout import create_chain_grid
 
 class SampleCheckpoint(Checkpoint):
