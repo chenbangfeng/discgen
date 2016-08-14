@@ -605,7 +605,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, dest="batch_size",
                         default=100, help="Size of each mini-batch")
     parser.add_argument("--z-dim", type=int, dest="z_dim",
-                        default=1000, help="Z-vector dimension")
+                        default=100, help="Z-vector dimension")
     parser.add_argument("--reconstruction-factor", type=float,
                         dest="reconstruction_factor", default=1.0,
                         help="Scaling Factor for reconstruction term")

@@ -186,7 +186,8 @@ def create_streams(train_set, valid_set, test_set, training_batch_size,
 
 def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
                           include_targets=False, color_convert=False,
-                          allowed=None, stretch=False):
+                          allowed=None, stretch=False,
+                          split_names=['train', 'valid', 'test']):
     """Creates data streams from fuel hdf5 file.
 
     Currently features must be 64x64.
@@ -216,11 +217,11 @@ def create_custom_streams(filename, training_batch_size, monitoring_batch_size,
     sources = ('features', 'targets') if include_targets else ('features',)
 
     dataset_fname = find_in_data_path(filename+'.hdf5')
-    data_train = H5PYDataset(dataset_fname, which_sets=['train'],
+    data_train = H5PYDataset(dataset_fname, which_sets=[split_names[0]],
                              sources=sources)
-    data_valid = H5PYDataset(dataset_fname, which_sets=['valid'],
+    data_valid = H5PYDataset(dataset_fname, which_sets=[split_names[1]],
                              sources=sources)
-    data_test = H5PYDataset(dataset_fname, which_sets=['test'],
+    data_test = H5PYDataset(dataset_fname, which_sets=[split_names[2]],
                             sources=sources)
     data_train.default_transformers = uint8_pixels_to_floatX(('features',))
     data_valid.default_transformers = uint8_pixels_to_floatX(('features',))
