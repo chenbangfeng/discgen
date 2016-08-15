@@ -21,7 +21,7 @@ from blocks.serialization import load
 from blocks.roles import OUTPUT
 from theano import tensor
 
-from discgen.utils import create_custom_streams, Colorize
+from utils.fuel_helper import create_custom_streams, Colorize
 
 import theano
 from blocks.select import Selector
