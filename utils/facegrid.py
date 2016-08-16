@@ -10,15 +10,7 @@ from PIL import Image
 from annoy import AnnoyIndex
 from sklearn.manifold import TSNE
 from fuel_helper import get_anchor_images
-from plat.utils import anchors_from_image
-
-def json_list_to_array(json_list):
-    files = json_list.split(",")
-    encoded = []
-    for file in files:
-        with open(file) as json_file:
-            encoded = encoded + json.load(json_file)
-    return np.array(encoded)
+from plat.utils import anchors_from_image, json_list_to_array
 
 def build_annoy_index(encoded, outfile):
     input_shape = encoded.shape

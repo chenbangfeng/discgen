@@ -9,9 +9,11 @@ from fuel.schemes import SequentialExampleScheme, ShuffledScheme
 from fuel.streams import DataStream
 from fuel.transformers import AgnosticSourcewiseTransformer
 
-def get_dataset_iterator(dataset, split, include_targets=False, unit_scale=True):
+def get_dataset_iterator(dataset, split, include_features=True, include_targets=False, unit_scale=True):
     """Get iterator for dataset, split, targets (labels) and scaling (from 255 to 1.0)"""
-    sources = ('features', 'targets') if include_targets else ('features',)
+    sources = []
+    sources = sources + ['features'] if include_features else sources
+    sources = sources + ['targets'] if include_targets else sources
     if split == "all":
         splits = ('train', 'valid', 'test')
     elif split == "nontrain":
