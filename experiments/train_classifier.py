@@ -21,7 +21,7 @@ from blocks.serialization import load
 from blocks.roles import OUTPUT
 from theano import tensor
 
-from discgen.utils import create_custom_streams
+from utils.fuel_helper import create_custom_streams
 
 def create_model_bricks(image_size, depth):
     # original celebA64 was depth=3 (went to bach_norm6)

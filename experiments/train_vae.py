@@ -382,11 +382,13 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
             add_role(log_sigma, PARAMETER)
             variance_parameters.append(log_sigma)
         # include mlp
-        log_sigma = shared_floatx(
-            numpy.zeros([classifier_mlp.output_dim]),
-            name='{}_log_sigma'.format("MLP"))
-        add_role(log_sigma, PARAMETER)
-        variance_parameters.append(log_sigma)
+        # DISABLED
+        # log_sigma = shared_floatx(
+        #     numpy.zeros([classifier_mlp.output_dim]),
+        #     name='{}_log_sigma'.format("MLP"))
+        # add_role(log_sigma, PARAMETER)
+        # variance_parameters.append(log_sigma)
+        # diagnostic
         num_disc_layers = len(variance_parameters)-1
         print("Applying discriminative regularization on {} layers".format(num_disc_layers))
 
@@ -426,8 +428,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
             discriminative_layer_terms[i] = tensor.zeros_like(kl_term)
         discriminative_term  = tensor.zeros_like(kl_term)
         if discriminative_regularization:
-            # Propagate both the input and the reconstruction through the
-            # classifier
+            # Propagate both the input and the reconstruction through the classifier
             acts_cg = ComputationGraph([classifier_mlp.apply(classifier_convnet.apply(x).flatten(ndim=2))])
             acts_hat_cg = ComputationGraph(
                 [classifier_mlp.apply(classifier_convnet.apply(mu_theta).flatten(ndim=2))])
@@ -435,7 +436,9 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
             # Retrieve activations of interest and compute discriminative
             # regularization reconstruction terms
             cur_layer = 0
-            for i, zip_pair in enumerate(zip(classifier_convnet.layers[1::3] + [classifier_mlp],
+            # CLASSIFIER MLP DISABLED
+            # for i, zip_pair in enumerate(zip(classifier_convnet.layers[1::3] + [classifier_mlp],
+            for i, zip_pair in enumerate(zip(classifier_convnet.layers[1::3],
                                         variance_parameters[1:])):
 
                 layer, log_sigma = zip_pair
