@@ -584,7 +584,12 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
 
     if oldmodel is not None:
         print("Initializing parameters with old model {}".format(oldmodel))
-        saved_model = load(oldmodel)
+        try:
+            saved_model = load(oldmodel)
+        except AttributeError:
+            # newer version of blocks
+            with open(oldmodel, 'rb') as src:
+                saved_model = load(src)
         main_loop.model.set_parameter_values(
             saved_model.model.get_parameter_values())
         del saved_model
