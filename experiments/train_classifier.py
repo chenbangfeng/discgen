@@ -109,7 +109,7 @@ def create_model_bricks(image_size, depth):
     if(depth > 5):
         layers = layers + [
             Convolutional(
-                filter_size=(4, 4),
+                filter_size=(3, 3),
                 num_filters=512,
                 name='conv11'),
             SpatialBatchNormalization(name='batch_norm11'),
@@ -125,7 +125,7 @@ def create_model_bricks(image_size, depth):
     if(depth > 6):
         layers = layers + [
             Convolutional(
-                filter_size=(4, 4),
+                filter_size=(3, 3),
                 num_filters=512,
                 name='conv13'),
             SpatialBatchNormalization(name='batch_norm13'),
@@ -141,7 +141,7 @@ def create_model_bricks(image_size, depth):
     if(depth > 7):
         layers = layers + [
             Convolutional(
-                filter_size=(4, 4),
+                filter_size=(3, 3),
                 num_filters=512,
                 name='conv15'),
             SpatialBatchNormalization(name='batch_norm15'),
