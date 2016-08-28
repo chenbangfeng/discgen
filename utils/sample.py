@@ -243,11 +243,14 @@ def main(cliargs):
     if args.anchors:
         allowed = None
         prohibited = None
+        include_targets = False
         if(args.allowed):
+            include_targets = True
             allowed = map(int, args.allowed.split(","))
         if(args.prohibited):
+            include_targets = True
             prohibited = map(int, args.prohibited.split(","))
-        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.image_size, args.color_convert)
+        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.image_size, args.color_convert, include_targets=include_targets)
 
     if args.anchor_image is not None:
         _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(args.image_size, args.image_size))
