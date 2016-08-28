@@ -180,6 +180,7 @@ def averages_to_attribute_vectors(with_attr, without_attr, num_encoded_attribute
         atvecs[n] = m1 - m2
     return atvecs
 
+#TODO: switch to plat.save_json_vectors
 def save_json_attribs(attribs, filename):
     with open(filename, 'w') as outfile:
         json.dump(attribs.tolist(), outfile)   

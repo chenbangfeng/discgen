@@ -235,7 +235,7 @@ def main(cliargs):
                         help="size of (offset) images")
     args = parser.parse_args(cliargs)
 
-    if args.seed:
+    if args.seed is not None:
         np.random.seed(args.seed)
         random.seed(args.seed)
 
