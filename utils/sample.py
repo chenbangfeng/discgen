@@ -156,6 +156,96 @@ def stream_output_vectors(dmodel, dataset, split, batch_size=20, color_convert=F
     print("VECTOR OUTPUT END")
     sys.stderr.write("Done streaming {} vectors\n".format(num_output))
 
+def run_with_args(args, dmodel, cur_anchor_image, cur_save_path):
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        random.seed(args.seed)
+
+    anchor_images = None
+    if args.anchors:
+        allowed = None
+        prohibited = None
+        include_targets = False
+        if(args.allowed):
+            include_targets = True
+            allowed = map(int, args.allowed.split(","))
+        if(args.prohibited):
+            include_targets = True
+            prohibited = map(int, args.prohibited.split(","))
+        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.image_size, args.color_convert, include_targets=include_targets)
+
+    if cur_anchor_image is not None:
+        _, _, anchor_images = anchors_from_image(cur_anchor_image, image_size=(args.image_size, args.image_size))
+        if args.offset > 0:
+            anchor_images = anchor_images[args.offset:]
+        # untested
+        if args.numanchors is not None:
+            anchor_images = anchor_images[:args.numanchors]
+
+    if args.passthrough:
+        print('Preparing image grid...')
+        img = grid2img(anchor_images, args.rows, args.cols, not args.tight)
+        img.save(cur_save_path)
+        sys.exit(0)
+
+    if dmodel is None:
+        print('Loading saved model...')
+        ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
+        dmodel = ModelClass(filename=args.model)
+
+    # dmodel = DiscGenModel(args.model)
+
+    if anchor_images is not None:
+        anchors = dmodel.encode_images(anchor_images)
+    elif args.anchor_vectors is not None:
+        anchors = get_json_vectors(args.anchor_vectors)
+    else:
+        anchors = None
+
+    if args.invert_anchors:
+        anchors = -1 * anchors
+
+    if args.encoder:
+        if anchors is not None:
+            output_vectors(anchors)
+        else:
+            stream_output_vectors(dmodel, args.dataset, args.split, batch_size=args.encoder_batch_size)
+        sys.exit(0)
+
+    global_offset = None
+    if args.anchor_offset is not None:
+        # compute anchors as offsets from existing anchor
+        offsets = get_json_vectors(args.anchor_offset)
+        anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x, args.anchor_offset_y,
+            args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
+
+    if args.global_offset is not None:
+        offsets = get_json_vectors(args.global_offset)
+        global_offset =  get_global_offset(offsets, args.global_indices, args.global_scale)
+
+    z_dim = dmodel.get_zdim()
+    # I don't remember what partway/encircle do so they are not handling the chain layout
+    if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
+        srows=((args.rows // args.spacing) + 1)
+        scols=((args.cols // args.spacing) + 1)
+        rand_anchors = generate_latent_grid(z_dim, rows=srows, cols=scols, fan=False, gradient=False,
+            spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, spacing=args.spacing, analogy=False)
+        if args.partway is not None:
+            l = len(rand_anchors)
+            clipped_anchors = anchors[:l]
+            anchors = (1.0 - args.partway) * rand_anchors + args.partway * clipped_anchors
+        elif args.encircle:
+            anchors = surround_anchors(srows, scols, anchors, rand_anchors)
+        else:
+            anchors = rand_anchors
+    z = generate_latent_grid(z_dim, args.rows, args.cols, args.fan, args.gradient, not args.linear, args.gaussian,
+            anchors, anchor_images, args.splash, args.chain, args.spacing, args.analogy)
+    if global_offset is not None:
+        z = z + global_offset
+
+    grid_from_latents(z, dmodel, args.rows, args.cols, anchor_images, args.tight, args.shoulders, cur_save_path)
+    return dmodel
+
 def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
     parser.add_argument("--model-module", dest='model_module', type=str,
@@ -241,94 +331,24 @@ def main(cliargs):
                         help="batch size when encoding vectors")
     parser.add_argument("--image-size", dest='image_size', type=int, default=64,
                         help="size of (offset) images")
+    parser.add_argument('--anchor-image-template', dest='anchor_image_template', default=None,
+                        help="template for anchor image filename")
+    parser.add_argument('--save-path-template', dest='save_path_template', default=None,
+                        help="template for save path filename")
+    parser.add_argument('--range', dest='range', default=None,
+                        help="low,high integer range for tempalte run")
     args = parser.parse_args(cliargs)
 
-    if args.seed is not None:
-        np.random.seed(args.seed)
-        random.seed(args.seed)
-
-    anchor_images = None
-    if args.anchors:
-        allowed = None
-        prohibited = None
-        include_targets = False
-        if(args.allowed):
-            include_targets = True
-            allowed = map(int, args.allowed.split(","))
-        if(args.prohibited):
-            include_targets = True
-            prohibited = map(int, args.prohibited.split(","))
-        anchor_images = get_anchor_images(args.dataset, args.split, args.offset, args.stepsize, args.numanchors, allowed, prohibited, args.image_size, args.color_convert, include_targets=include_targets)
-
-    if args.anchor_image is not None:
-        _, _, anchor_images = anchors_from_image(args.anchor_image, image_size=(args.image_size, args.image_size))
-        if args.offset > 0:
-            anchor_images = anchor_images[args.offset:]
-        # untested
-        if args.numanchors is not None:
-            anchor_images = anchor_images[:args.numanchors]
-
-    if args.passthrough:
-        print('Preparing image grid...')
-        img = grid2img(anchor_images, args.rows, args.cols, not args.tight)
-        img.save(args.save_path)
-        sys.exit(0)
-
-    print('Loading saved model...')
-    ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
-    dmodel = ModelClass(filename=args.model)
-
-    # dmodel = DiscGenModel(args.model)
-
-    if anchor_images is not None:
-        anchors = dmodel.encode_images(anchor_images)
-    elif args.anchor_vectors is not None:
-        anchors = get_json_vectors(args.anchor_vectors)
+    dmodel = None
+    if args.range is None:
+        run_with_args(args, dmodel, args.anchor_image, args.save_path)
     else:
-        anchors = None
-
-    if args.invert_anchors:
-        anchors = -1 * anchors
-
-    if args.encoder:
-        if anchors is not None:
-            output_vectors(anchors)
-        else:
-            stream_output_vectors(dmodel, args.dataset, args.split, batch_size=args.encoder_batch_size)
-        sys.exit(0)
-
-    global_offset = None
-    if args.anchor_offset is not None:
-        # compute anchors as offsets from existing anchor
-        offsets = get_json_vectors(args.anchor_offset)
-        anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x, args.anchor_offset_y,
-            args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
-
-    if args.global_offset is not None:
-        offsets = get_json_vectors(args.global_offset)
-        global_offset =  get_global_offset(offsets, args.global_indices, args.global_scale)
-
-    z_dim = dmodel.get_zdim()
-    # I don't remember what partway/encircle do so they are not handling the chain layout
-    if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
-        srows=((args.rows // args.spacing) + 1)
-        scols=((args.cols // args.spacing) + 1)
-        rand_anchors = generate_latent_grid(z_dim, rows=srows, cols=scols, fan=False, gradient=False,
-            spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, spacing=args.spacing, analogy=False)
-        if args.partway is not None:
-            l = len(rand_anchors)
-            clipped_anchors = anchors[:l]
-            anchors = (1.0 - args.partway) * rand_anchors + args.partway * clipped_anchors
-        elif args.encircle:
-            anchors = surround_anchors(srows, scols, anchors, rand_anchors)
-        else:
-            anchors = rand_anchors
-    z = generate_latent_grid(z_dim, args.rows, args.cols, args.fan, args.gradient, not args.linear, args.gaussian,
-            anchors, anchor_images, args.splash, args.chain, args.spacing, args.analogy)
-    if global_offset is not None:
-        z = z + global_offset
-
-    grid_from_latents(z, dmodel, args.rows, args.cols, anchor_images, args.tight, args.shoulders, args.save_path)
+        template_low, template_high = map(int, args.range.split(","))
+        for i in range(template_low, template_high + 1):
+            cur_anchor_image = args.anchor_image_template.format(i)
+            cur_save_path = args.save_path_template.format(i)
+            print("Saving: {}".format(cur_save_path))
+            dmodel = run_with_args(args, dmodel, cur_anchor_image, cur_save_path)
 
 if __name__ == '__main__':
     main(sys.argv[1:])
