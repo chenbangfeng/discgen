@@ -112,14 +112,16 @@ def get_global_offset(offsets, indices_str, scale):
     global_offset = offset_from_string(indices_str, offsets, dim)
     return scale * global_offset
 
-def stream_output_vectors(dmodel, dataset, split, color_convert=False):
+def stream_output_vectors(dmodel, dataset, split, batch_size=20, color_convert=False):
     it = get_dataset_iterator(dataset, split)
-    batch_size = 20
     done = False
+
+    sys.stderr.write("Streaming output vectors to stdout (batch size={})\n".format(batch_size))
 
     print("VECTOR OUTPUT BEGIN")
     print("JSON#[")
 
+    num_output = 0
     while not done:
         anchors = []
         try:
@@ -131,6 +133,7 @@ def stream_output_vectors(dmodel, dataset, split, color_convert=False):
                     anchors.append(cur[0])
             anchors_input = np.array(anchors)
             latents = dmodel.encode_images(anchors_input)
+            num_output += len(latents)
             for v in latents:
                 print("JSON#{},".format(vector_to_json_array(v)))
         except StopIteration:
@@ -138,6 +141,7 @@ def stream_output_vectors(dmodel, dataset, split, color_convert=False):
             if len(anchors) > 0:
                 anchors_input = np.array(anchors)
                 latents = dmodel.encode_images(anchors_input)
+                num_output += len(latents)
                 # end cut-n-paste
                 for v in latents[:-1]:
                     print("JSON#{},".format(vector_to_json_array(v)))
@@ -150,6 +154,7 @@ def stream_output_vectors(dmodel, dataset, split, color_convert=False):
 
     print("JSON#]")
     print("VECTOR OUTPUT END")
+    sys.stderr.write("Done streaming {} vectors\n".format(num_output))
 
 def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
@@ -231,6 +236,9 @@ def main(cliargs):
                         help="Append anchors to left/right columns")
     parser.add_argument('--encoder', dest='encoder', default=False, action='store_true',
                         help="Ouput dataset as encoded vectors")
+    parser.add_argument("--encoder-batch-size", dest='encoder_batch_size',
+                        type=int, default=20,
+                        help="batch size when encoding vectors")
     parser.add_argument("--image-size", dest='image_size', type=int, default=64,
                         help="size of (offset) images")
     args = parser.parse_args(cliargs)
@@ -286,7 +294,7 @@ def main(cliargs):
         if anchors is not None:
             output_vectors(anchors)
         else:
-            stream_output_vectors(dmodel, args.dataset, args.split)
+            stream_output_vectors(dmodel, args.dataset, args.split, batch_size=args.encoder_batch_size)
         sys.exit(0)
 
     global_offset = None
