@@ -107,6 +107,40 @@ def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minsca
     newanchors.append(anchor + x_maxscale * x_offset + y_maxscale * y_offset)
     return np.array(newanchors)
 
+def anchors_noise_offsets(anchors, offsets, rows, cols, spacing, z_step, x_indices_str, y_indices_str, x_minscale, y_minscale, x_maxscale, y_maxscale):
+    from noise import snoise3
+    from plat.interpolate import lerp
+
+    only_anchor = None
+    if len(anchors) == 1:
+        only_anchor = anchors[0]
+
+    dim = len(anchors[0])
+    x_offset = offset_from_string(x_indices_str, offsets, dim)
+    y_offset = offset_from_string(y_indices_str, offsets, dim)
+
+    num_row_anchors = (rows + spacing - 1) / spacing
+    num_col_anchors = (cols + spacing - 1) / spacing
+
+    newanchors = []
+    cur_anchor_index = 0
+    for j in range(num_row_anchors):
+        y_frac = float(j) / num_row_anchors
+        for i in range(num_col_anchors):
+            if only_anchor is None:
+                cur_anchor = anchors[cur_anchor_index]
+                cur_anchor_index += 1
+            else:
+                cur_anchor = only_anchor
+            x_frac = float(i) / num_col_anchors
+            n1 = 0.5 * (1.0 + snoise3(x_frac, y_frac, 0+z_step, octaves=4))
+            n2 = 0.5 * (1.0 + snoise3(x_frac, y_frac, 100+z_step, octaves=4))
+            x_scale = lerp(n1, x_minscale, x_maxscale)
+            y_scale = lerp(n2, y_minscale, y_maxscale)
+            # print("{}, {} produced {} -> {}, {} = {}".format(i,j,n1,x_minscale, x_maxscale,x_scale))
+            newanchors.append(cur_anchor + x_scale * x_offset + y_scale * y_offset)
+    return np.array(newanchors)
+
 def get_global_offset(offsets, indices_str, scale):
     dim = len(offsets[0])
     global_offset = offset_from_string(indices_str, offsets, dim)
@@ -156,7 +190,7 @@ def stream_output_vectors(dmodel, dataset, split, batch_size=20, color_convert=F
     print("VECTOR OUTPUT END")
     sys.stderr.write("Done streaming {} vectors\n".format(num_output))
 
-def run_with_args(args, dmodel, cur_anchor_image, cur_save_path):
+def run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step):
     if args.seed is not None:
         np.random.seed(args.seed)
         random.seed(args.seed)
@@ -216,8 +250,13 @@ def run_with_args(args, dmodel, cur_anchor_image, cur_save_path):
     if args.anchor_offset is not None:
         # compute anchors as offsets from existing anchor
         offsets = get_json_vectors(args.anchor_offset)
-        anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x, args.anchor_offset_y,
-            args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
+        if args.anchor_noise:
+            anchors = anchors_noise_offsets(anchors, offsets, args.rows, args.cols, args.spacing,
+                cur_z_step, args.anchor_offset_x, args.anchor_offset_y,
+                args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
+        else:
+            anchors = anchors_from_offsets(anchors[0], offsets, args.anchor_offset_x, args.anchor_offset_y,
+                args.anchor_offset_x_minscale, args.anchor_offset_y_minscale, args.anchor_offset_x_maxscale, args.anchor_offset_y_maxscale)
 
     if args.global_offset is not None:
         offsets = get_json_vectors(args.global_offset)
@@ -282,6 +321,8 @@ def main(cliargs):
                         help="scaling factor for min x offset")
     parser.add_argument('--anchor-offset-y-maxscale', dest='anchor_offset_y_maxscale', default=2.0, type=float,
                         help="scaling factor for min y offset")
+    parser.add_argument('--anchor-noise', dest='anchor_noise', default=False, action='store_true',
+                        help="interpret anchor offsets as noise paramaters")
     parser.add_argument('--gradient', dest='gradient', default=False, action='store_true')
     parser.add_argument('--linear', dest='linear', default=False, action='store_true')
     parser.add_argument('--gaussian', dest='gaussian', default=False, action='store_true')
@@ -337,18 +378,27 @@ def main(cliargs):
                         help="template for save path filename")
     parser.add_argument('--range', dest='range', default=None,
                         help="low,high integer range for tempalte run")
+    parser.add_argument('--z-step', dest='z_step', default=0.01, type=float,
+                        help="variable that gets stepped each template step")
+    parser.add_argument('--z-initial', dest='z_initial', default=0.0, type=float,
+                        help="initial value of variable stepped each template step")
     args = parser.parse_args(cliargs)
 
     dmodel = None
+    cur_z_step = args.z_initial
     if args.range is None:
-        run_with_args(args, dmodel, args.anchor_image, args.save_path)
+        run_with_args(args, dmodel, args.anchor_image, args.save_path, cur_z_step)
     else:
         template_low, template_high = map(int, args.range.split(","))
         for i in range(template_low, template_high + 1):
-            cur_anchor_image = args.anchor_image_template.format(i)
+            if args.anchor_image_template is not None:
+                cur_anchor_image = args.anchor_image_template.format(i)
+            else:
+                cur_anchor_image = args.anchor_image
             cur_save_path = args.save_path_template.format(i)
             print("Saving: {}".format(cur_save_path))
-            dmodel = run_with_args(args, dmodel, cur_anchor_image, cur_save_path)
+            dmodel = run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step)
+            cur_z_step += args.z_step
 
 if __name__ == '__main__':
     main(sys.argv[1:])
