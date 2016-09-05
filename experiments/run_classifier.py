@@ -47,7 +47,13 @@ def get_all_data_inorder(filename, batch_size):
 
 
 def create_running_graphs(classifier):
-    classifier_model = Model(load(classifier).algorithm.cost)
+    try:
+        classifier_model = Model(load(classifier).algorithm.cost)
+    except AttributeError:
+        # newer version of blocks
+        with open(classifier, 'rb') as src:
+            classifier_model = Model(load(src).algorithm.cost)
+
     selector = Selector(classifier_model.top_bricks)
     convnet, = selector.select('/convnet').bricks
     mlp, = selector.select('/mlp').bricks
