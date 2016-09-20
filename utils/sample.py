@@ -108,7 +108,7 @@ def anchors_from_offsets(anchor, offsets, x_indices_str, y_indices_str, x_minsca
     return np.array(newanchors)
 
 def anchors_noise_offsets(anchors, offsets, rows, cols, spacing, z_step, x_indices_str, y_indices_str, x_minscale, y_minscale, x_maxscale, y_maxscale):
-    from noise import snoise3
+    from noise import pnoise3
     from plat.interpolate import lerp
 
     only_anchor = None
@@ -133,8 +133,8 @@ def anchors_noise_offsets(anchors, offsets, rows, cols, spacing, z_step, x_indic
             else:
                 cur_anchor = only_anchor
             x_frac = float(i) / num_col_anchors
-            n1 = 0.5 * (1.0 + snoise3(x_frac, y_frac, 0+z_step, octaves=4))
-            n2 = 0.5 * (1.0 + snoise3(x_frac, y_frac, 100+z_step, octaves=4))
+            n1 = 0.5 * (1.0 + pnoise3(x_frac, y_frac, z_step, octaves=4, repeatz=2))
+            n2 = 0.5 * (1.0 + pnoise3(100+x_frac, 100+y_frac, z_step, octaves=4, repeatz=2))
             x_scale = lerp(n1, x_minscale, x_maxscale)
             y_scale = lerp(n2, y_minscale, y_maxscale)
             # print("{}, {} produced {} -> {}, {} = {}".format(i,j,n1,x_minscale, x_maxscale,x_scale))
@@ -260,6 +260,8 @@ def run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step):
 
     if args.global_offset is not None:
         offsets = get_json_vectors(args.global_offset)
+        if args.global_ramp:
+            offsets = cur_z_step * offsets
         global_offset =  get_global_offset(offsets, args.global_indices, args.global_scale)
 
     z_dim = dmodel.get_zdim()
@@ -307,6 +309,8 @@ def main(cliargs):
                         help="offset indices to apply globally")
     parser.add_argument('--global-scale', dest='global_scale', default=1.0, type=float,
                         help="scaling factor for global offset")
+    parser.add_argument('--global-ramp', dest='global_ramp', default=False, action='store_true',
+                        help="ramp global effect with z-step")
     parser.add_argument('--anchor-offset', dest='anchor_offset', default=None,
                         help="use json file as source of each anchors offsets")
     parser.add_argument('--anchor-offset-x', dest='anchor_offset_x', default="5", type=str,
