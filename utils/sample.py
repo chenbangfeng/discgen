@@ -42,7 +42,7 @@ def add_shoulders(images, anchor_images, rows, cols):
     return nimages, rows, ncols
 
 # returns list of latent variables to support rows x cols 
-def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, anchors, anchor_images, splash, chain, spacing, analogy):
+def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, anchors, anchor_images, splash, chain, spacing, analogy, rand_uniform=False):
     if fan:
         z = create_fan_grid(z_dim, cols, rows)
     elif gradient:
@@ -52,8 +52,10 @@ def generate_latent_grid(z_dim, rows, cols, fan, gradient, spherical, gaussian, 
     elif chain:
         z = create_chain_grid(rows, cols, z_dim, spacing, anchors, spherical, gaussian)
     else:
-        # TODO: non-gaussian version
-        z = np.random.normal(loc=0, scale=1, size=(rows * cols, z_dim))
+        if rand_uniform:
+            z = np.random.uniform(-1, 1, size=(rows * cols, z_dim))
+        else:
+            z = np.random.normal(loc=0, scale=1, size=(rows * cols, z_dim))
 
     return z
 
@@ -266,11 +268,13 @@ def run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step):
 
     z_dim = dmodel.get_zdim()
     # I don't remember what partway/encircle do so they are not handling the chain layout
+    # this handles the case (at least) of splashes with random anchors
     if (args.partway is not None) or args.encircle or (args.splash and anchors is None):
         srows=((args.rows // args.spacing) + 1)
         scols=((args.cols // args.spacing) + 1)
         rand_anchors = generate_latent_grid(z_dim, rows=srows, cols=scols, fan=False, gradient=False,
-            spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, spacing=args.spacing, analogy=False)
+            spherical=False, gaussian=False, anchors=None, anchor_images=None, splash=False, chain=False,
+            spacing=args.spacing, analogy=False, rand_uniform=args.uniform)
         if args.partway is not None:
             l = len(rand_anchors)
             clipped_anchors = anchors[:l]
@@ -330,6 +334,8 @@ def main(cliargs):
     parser.add_argument('--gradient', dest='gradient', default=False, action='store_true')
     parser.add_argument('--linear', dest='linear', default=False, action='store_true')
     parser.add_argument('--gaussian', dest='gaussian', default=False, action='store_true')
+    parser.add_argument('--uniform', dest='uniform', default=False, action='store_true',
+                        help="Random prior is uniform [-1,1] (not gaussian)")
     parser.add_argument('--tight', dest='tight', default=False, action='store_true')
     parser.add_argument("--seed", type=int,
                 default=None, help="Optional random seed")
