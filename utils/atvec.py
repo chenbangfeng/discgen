@@ -201,9 +201,26 @@ def main(cliargs):
                         help="Balanced two attributes and generate atvec. eg: 20,31")
     parser.add_argument("--balanced", dest='balanced', type=str, default=None,
                         help="Balance attributes and generate atvec. eg: 20,21,31")
+    parser.add_argument("--avg-diff", dest='avg_diff', type=str, default=None,
+                        help="Two lists of vectors to average and then diff")
     parser.add_argument('--outfile', dest='outfile', default=None,
                         help="Output json file for vectors.")
     args = parser.parse_args(cliargs)
+
+    if args.avg_diff:
+        vecs1, vecs2 = args.avg_diff.split(",")
+        encoded1 = json_list_to_array(vecs1)
+        encoded2 = json_list_to_array(vecs2)
+        print("Taking the difference between {} and {} vectors".format(len(encoded1), len(encoded2)))
+        m1 = np.mean(encoded1,axis=0)
+        m2 = np.mean(encoded2,axis=0)
+        atvec = m2 - m1
+        z_dim, = atvec.shape
+        atvecs = atvec.reshape(1,z_dim)
+        print("Computed diff shape: {}".format(atvecs.shape))
+        if args.outfile is not None:
+            save_json_attribs(atvecs, args.outfile)
+        sys.exit(0)
 
     encoded = json_list_to_array(args.encoded_vectors)
     num_rows, z_dim = encoded.shape
