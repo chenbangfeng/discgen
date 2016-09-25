@@ -8,12 +8,22 @@ import random
 import sys
 import json
 
-from fuel_helper import get_dataset_iterator, get_anchor_images
 from plat.grid_layout import grid2img, create_gradient_grid, create_splash_grid, create_chain_grid, create_fan_grid
 from plat.utils import anchors_from_image, get_json_vectors, offset_from_string
 
 import importlib
 g_image_size = 128
+
+def lazy_init_fuel_dependencies():
+    try:
+        from fuel_helper import get_dataset_iterator, get_anchor_images
+        return get_dataset_iterator, get_anchor_images
+    except ImportError as e:
+        # raise ImportError('<any message you want here>')
+        print("Error: Failed fuel dependency")
+        print e
+        exit(1);
+
 
 # returns new version of images, rows, cols
 def add_shoulders(images, anchor_images, rows, cols):
@@ -149,6 +159,7 @@ def get_global_offset(offsets, indices_str, scale):
     return scale * global_offset
 
 def stream_output_vectors(dmodel, dataset, split, batch_size=20, color_convert=False):
+    get_dataset_iterator, _ = lazy_init_fuel_dependencies()
     it = get_dataset_iterator(dataset, split)
     done = False
 
@@ -199,6 +210,7 @@ def run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step):
 
     anchor_images = None
     if args.anchors:
+        _, get_anchor_images = lazy_init_fuel_dependencies()
         allowed = None
         prohibited = None
         include_targets = False
