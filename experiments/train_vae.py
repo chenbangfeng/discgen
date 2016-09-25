@@ -28,8 +28,8 @@ from theano import tensor
 
 from discgen.utils import create_celeba_streams
 from chips.fuel_helper import create_custom_streams
-from utils.interface import DiscGenModel
-from utils.samplecheckpoint import SampleCheckpoint
+from discgen.interface import DiscGenModel
+from chips.samplecheckpoint import SampleCheckpoint
 
 
 def create_model_bricks(z_dim, image_size, depth):
