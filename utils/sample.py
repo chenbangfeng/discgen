@@ -238,10 +238,11 @@ def run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step):
 
     if dmodel is None:
         print('Loading saved model...')
-        ModelClass = getattr(importlib.import_module(args.model_module), args.model_class)
+        model_class_parts = args.model_class.split(".")
+        model_class_name = model_class_parts[-1]
+        model_module_name = ".".join(model_class_parts[:-1])
+        ModelClass = getattr(importlib.import_module(model_module_name), model_class_name)
         dmodel = ModelClass(filename=args.model)
-
-    # dmodel = DiscGenModel(args.model)
 
     if anchor_images is not None:
         anchors = dmodel.encode_images(anchor_images)
@@ -305,10 +306,8 @@ def run_with_args(args, dmodel, cur_anchor_image, cur_save_path, cur_z_step):
 
 def main(cliargs):
     parser = argparse.ArgumentParser(description="Plot model samples")
-    parser.add_argument("--model-module", dest='model_module', type=str,
-                        default="utils.interface", help="module encapsulating model")
     parser.add_argument("--model-class", dest='model_class', type=str,
-                        default="DiscGenModel", help="class encapsulating model")
+                        default="plat.models.discgen.DiscGenModel", help="class encapsulating model")
     parser.add_argument("--model", dest='model', type=str, default=None,
                         help="path to the saved model")
     parser.add_argument("--rows", type=int, default=5,

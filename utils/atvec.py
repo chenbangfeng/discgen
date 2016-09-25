@@ -2,7 +2,7 @@ import argparse
 import sys
 import json
 import numpy as np
-from utils.fuel_helper import get_dataset_iterator
+from chips.fuel_helper import get_dataset_iterator
 from plat.utils import json_list_to_array
 
 def get_averages(attribs, encoded, num_encoded_attributes):
