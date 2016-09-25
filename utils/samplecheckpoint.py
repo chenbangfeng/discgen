@@ -8,7 +8,6 @@ import theano.tensor as T
 from blocks.extensions.saveload import Checkpoint
 
 from sample import grid_from_latents
-from utils.fuel_helper import get_anchor_images
 from plat.grid_layout import create_chain_grid
 
 class SampleCheckpoint(Checkpoint):
@@ -25,6 +24,9 @@ class SampleCheckpoint(Checkpoint):
         self.spacing = 3
         self.z_dim = z_dim
         numanchors = 10 + 10
+
+        #putting this import here allows serialized models to be loaded without chips
+        from chips.fuel_helper import get_anchor_images
         self.anchor_images = get_anchor_images(dataset, split, numanchors=numanchors, image_size=image_size, include_targets=False)
         if not os.path.exists(self.save_subdir):
             os.makedirs(self.save_subdir)

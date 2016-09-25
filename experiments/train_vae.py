@@ -27,7 +27,7 @@ from blocks.utils import find_bricks, shared_floatx
 from theano import tensor
 
 from discgen.utils import create_celeba_streams
-from utils.fuel_helper import create_custom_streams
+from chips.fuel_helper import create_custom_streams
 from utils.interface import DiscGenModel
 from utils.samplecheckpoint import SampleCheckpoint
 
@@ -488,7 +488,7 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
 
 
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
-        classifier, vintage, monitor_every, checkpoint_every, dataset, color_convert,
+        classifier, vintage, monitor_every, monitor_before, checkpoint_every, dataset, color_convert,
         image_size, net_depth, subdir,
         reconstruction_factor, kl_factor, discriminative_factor, disc_weights):
 
@@ -567,7 +567,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         every_n_epochs=monitor_every)
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities_list[1], valid_monitor_stream, prefix="valid",
-        after_epoch=False, before_first_epoch=False,
+        after_epoch=False, before_first_epoch=monitor_before,
         every_n_epochs=monitor_every)
 
     # Prepare checkpoint
@@ -630,6 +630,9 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint-every", type=int,
                         dest="checkpoint_every", default=5,
                         help="Frequency in epochs for checkpointing")
+    parser.add_argument('--monitor-before', dest='monitor_before',
+                        default=False, action='store_true',
+                        help="monitor at epoch 0")
     parser.add_argument('--dataset', dest='dataset', default=None,
                         help="Dataset for training.")
     parser.add_argument('--color-convert', dest='color_convert',
@@ -647,7 +650,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     disc_weights = map(float, args.discriminative_layer_weights.split(","))
     run(args.batch_size, args.model, args.z_dim, args.oldmodel,
-        args.regularize, args.classifier, args.vintage, args.monitor_every,
+        args.regularize, args.classifier, args.vintage, args.monitor_every, args.monitor_before,
         args.checkpoint_every, args.dataset, args.color_convert,
         args.image_size, args.net_depth, args.subdir,
         args.reconstruction_factor, args.kl_factor, args.discriminative_factor, disc_weights)
