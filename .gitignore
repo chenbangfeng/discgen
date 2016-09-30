@@ -1,3 +1,7 @@
+# models and outputs go here
+models/
+outputs/
+
 # Trained models and parameters
 *.pkl
 *.zip
