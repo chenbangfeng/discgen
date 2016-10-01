@@ -490,7 +490,8 @@ def create_training_computation_graphs(z_dim, image_size, net_depth, discriminat
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
         classifier, vintage, monitor_every, monitor_before, checkpoint_every, dataset, color_convert,
         image_size, net_depth, subdir,
-        reconstruction_factor, kl_factor, discriminative_factor, disc_weights):
+        reconstruction_factor, kl_factor, discriminative_factor, disc_weights,
+        num_epochs):
 
     if dataset:
         streams = create_custom_streams(filename=dataset,
@@ -563,7 +564,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
 
     train_monitoring = DataStreamMonitoring(
         monitored_quantities_list[0], train_monitor_stream, prefix="train",
-        updates=extra_updates, after_epoch=False, before_first_epoch=True,
+        updates=extra_updates, after_epoch=False, before_first_epoch=monitor_before,
         every_n_epochs=monitor_every)
     valid_monitoring = DataStreamMonitoring(
         monitored_quantities_list[1], valid_monitor_stream, prefix="valid",
@@ -575,7 +576,7 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
                             before_training=True, use_cpickle=True)
 
     # TODO: why does z_dim=foo become foo/2?
-    extensions = [Timing(), FinishAfter(after_n_epochs=100), checkpoint,
+    extensions = [Timing(), FinishAfter(after_n_epochs=num_epochs), checkpoint,
                   train_monitoring, valid_monitoring, 
                   SampleCheckpoint(interface=DiscGenModel, z_dim=z_dim/2, image_size=(image_size, image_size), channels=3, dataset=dataset, split="valid", save_subdir=subdir, before_training=True, after_epoch=True),
                   Printing(), ProgressBar()]
@@ -641,6 +642,8 @@ if __name__ == "__main__":
     parser.add_argument("--oldmodel", type=str, default=None,
                         help="Use a model file created by a previous run as\
                         a starting point for parameters")
+    parser.add_argument("--num-epochs", type=int, dest="num_epochs",
+                        default=100, help="Stop training after num-epochs.")
     parser.add_argument("--subdir", dest='subdir', type=str, default="output",
                         help="Subdirectory for output files (images)")
     parser.add_argument("--image-size", dest='image_size', type=int, default=64,
@@ -653,4 +656,5 @@ if __name__ == "__main__":
         args.regularize, args.classifier, args.vintage, args.monitor_every, args.monitor_before,
         args.checkpoint_every, args.dataset, args.color_convert,
         args.image_size, args.net_depth, args.subdir,
-        args.reconstruction_factor, args.kl_factor, args.discriminative_factor, disc_weights)
+        args.reconstruction_factor, args.kl_factor, args.discriminative_factor, disc_weights,
+        args.num_epochs)
