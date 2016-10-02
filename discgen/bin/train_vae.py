@@ -32,7 +32,7 @@ from theano import tensor
 from discgen.utils import create_celeba_streams
 from plat.fuel_helper import create_custom_streams
 from discgen.interface import DiscGenModel
-from plat.samplecheckpoint import SampleCheckpoint
+from plat.training.samplecheckpoint import SampleCheckpoint
 from discgen.vae import create_training_computation_graphs
 
 def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
@@ -123,11 +123,18 @@ def run(batch_size, save_path, z_dim, oldmodel, discriminative_regularization,
     checkpoint = Checkpoint(save_path, every_n_epochs=checkpoint_every,
                             before_training=True, use_cpickle=True)
 
+    sample_checkpoint = SampleCheckpoint(interface=DiscGenModel, z_dim=z_dim/2,
+                            image_size=(image_size, image_size), channels=3,
+                            dataset=dataset, split="valid", save_subdir=subdir,
+                            before_training=True, after_epoch=True)
     # TODO: why does z_dim=foo become foo/2?
-    extensions = [Timing(), FinishAfter(after_n_epochs=num_epochs), checkpoint,
+    extensions = [Timing(),
+                  FinishAfter(after_n_epochs=num_epochs),
+                  checkpoint,
+                  sample_checkpoint,
                   train_monitoring, valid_monitoring, 
-                  SampleCheckpoint(interface=DiscGenModel, z_dim=z_dim/2, image_size=(image_size, image_size), channels=3, dataset=dataset, split="valid", save_subdir=subdir, before_training=True, after_epoch=True),
-                  Printing(), ProgressBar()]
+                  Printing(),
+                  ProgressBar()]
     main_loop = MainLoop(model=model, data_stream=main_loop_stream,
                          algorithm=algorithm, extensions=extensions)
 
