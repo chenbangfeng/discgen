@@ -1,4 +1,6 @@
 """Trains a CelebA-like classifier with up to 64 attributes."""
+# TODO: cleanup imports (most of this not needed)
+
 import argparse
 import logging
 
@@ -21,7 +23,7 @@ from blocks.serialization import load
 from blocks.roles import OUTPUT
 from theano import tensor
 
-from chips.fuel_helper import Colorize
+from plat.fuel_helper import Colorize
 
 import theano
 from blocks.select import Selector
