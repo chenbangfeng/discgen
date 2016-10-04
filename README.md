@@ -5,10 +5,23 @@
 Code for the [Discriminative Regularization for Generative Models](http://arxiv.org/abs/1602.03220)
 paper.
 
-## Requirements
+To install everything:
+```
+$ pip install git+https://github.com/dribnet/discgen.git \
+  -r https://raw.githubusercontent.com/dribnet/discgen/master/requirements.txt
+```
 
-* [Blocks](https://blocks.readthedocs.org/en/latest/), development version
-* [Fuel](https://fuel.readthedocs.org/en/latest/), development version
+or alternately
+```
+$ git clone https://github.com/dribnet/discgen.git
+$ pip install -e file:.#egg=discgen -r requirements.txt
+```
+
+## Dependencies (installed by process above)
+
+* [Theano](https://blocks.readthedocs.org/en/latest/), 0.9.0dev1
+* [Blocks](https://blocks.readthedocs.org/en/latest/), 0.2.0plus1
+* [Fuel](https://fuel.readthedocs.org/en/latest/), 0.2.0
 
 ## Downloading and converting the datasets
 

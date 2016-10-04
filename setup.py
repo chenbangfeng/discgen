@@ -3,18 +3,19 @@ from setuptools import find_packages
 
 install_requires = [
     'numpy',
+    'fuel'
 ]
 
 setup(name='discgen',
-      version='0.1.0',
+      version='0.2.0',
       description='Discriminative Regularization for Generative Models',
       author='Tom White',
       author_email='tom@sixdozen.com',
       url='https://github.com/dribnet/discgen',
-      download_url='https://github.com/dribnet/discgen/tarball/0.1.0',
+      download_url='https://github.com/dribnet/discgen/archive/0.2.0.tar.gz',
       license='MIT',
       entry_points={
           # 'console_scripts': ['neupup = neupup.neupup:main']
       },
       install_requires=install_requires,
-      packages=find_packages())
+      packages=find_packages(exclude=['experiments', 'scripts', 'legacy']))
