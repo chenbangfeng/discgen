@@ -62,7 +62,7 @@ class DiscGenModel:
     def encode_images(self, images):
         if self.encoder_function is None:
             self.encoder_function = get_image_encoder_function(self.model)
-        print('Encoding...')
+        # print('Encoding...')
         examples, latents = self.encoder_function(images)
         return latents
 
@@ -75,7 +75,7 @@ class DiscGenModel:
         if self.sampling_function is None:
             self.sampling_function = get_decoder_function(self.model)
         z_float = theano._asarray(z, dtype=theano.config.floatX)
-        print('Sampling...')
+        # print('Sampling...')
         latents, samples = self.sampling_function(z_float)
-        print(samples.shape)
+        # print(samples.shape)
         return samples
